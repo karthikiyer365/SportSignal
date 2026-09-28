@@ -18,6 +18,9 @@ def test_fetch_club_elo_snapshot_renames_and_tags_date(monkeypatch):
     )
 
     class FakeClubElo:
+        def __init__(self, no_cache=False):
+            captured["no_cache"] = no_cache
+
         def read_by_date(self, date):
             captured["date"] = date
             return fake
@@ -45,7 +48,8 @@ def test_fetch_club_elo_snapshot_default_date_is_todays_cache_key(monkeypatch):
         index=pd.Index(["Arsenal"], name="team"),
     )
     monkeypatch.setattr("soccerdata.ClubElo",
-                        lambda: type("X", (), {"read_by_date": lambda self, d: fake})())
+                        lambda no_cache=False: type(
+                            "X", (), {"read_by_date": lambda self, d: fake})())
 
     today = pd.Timestamp.now().strftime("%Y-%m-%d")
     m = ce.fetch_club_elo_snapshot()
@@ -67,6 +71,9 @@ def test_fetch_club_elo_history_drops_forward_placeholder(monkeypatch):
     }).set_index("from")
 
     class FakeClubElo:
+        def __init__(self, no_cache=False):
+            pass
+
         def read_team_history(self, team):
             return fake
 

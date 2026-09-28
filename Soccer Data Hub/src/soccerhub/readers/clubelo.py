@@ -20,7 +20,7 @@ def fetch_club_elo_snapshot(date: str | None = None, force: bool = False) -> Man
     import soccerdata as sd  # lazy: keeps the heavy scraper stack off import time
 
     def produce():
-        df = sd.ClubElo().read_by_date(d).reset_index()
+        df = sd.ClubElo(no_cache=force).read_by_date(d).reset_index()
         df = df.rename(columns={"from": "elo_from", "to": "elo_to"})
         # pandas Timestamps aren't JSON-serializable for the Supabase client
         df["elo_from"] = df["elo_from"].dt.strftime("%Y-%m-%d")
@@ -38,7 +38,7 @@ def fetch_club_elo_history(team: str, since: str = "2008-01-01",
     import soccerdata as sd  # lazy: keeps the heavy scraper stack off import time
 
     def produce():
-        df = sd.ClubElo().read_team_history(team).reset_index()
+        df = sd.ClubElo(no_cache=force).read_team_history(team).reset_index()
         # last row is a forward placeholder (rating pre-booked for the next
         # window, e.g. from=Aug to=Dec of the coming season) — not a snapshot
         today = pd.Timestamp.now().strftime("%Y-%m-%d")
