@@ -229,3 +229,17 @@ def test_build_player_season_merges_value(monkeypatch):
     assert unk["save_pct"] == 70.9
     assert unk["clean_sheet_pct"] == 21.1
     assert pd.isna(saka["save_pct"])
+
+
+@pytest.mark.parametrize("today,expected", [
+    ("2026-08-01", "2026"),  # first day of the new season
+    ("2026-07-31", "2025"),  # last day before it — still the old season
+    ("2026-09-28", "2026"),
+    ("2027-01-15", "2026"),  # new calendar year, same season
+])
+def test_current_season_august_cutover(today, expected):
+    from datetime import date
+
+    from soccerhub.pipelines.player_season import current_season
+
+    assert current_season(date.fromisoformat(today)) == expected

@@ -3,7 +3,7 @@
 Supabase is the source of truth; local parquet manifests are build cache.
 """
 from soccerhub.manifest import Manifest
-from soccerhub.pipelines.player_season import build_player_season
+from soccerhub.pipelines.player_season import build_player_season, current_season
 from soccerhub.pipelines.query import read_hub
 from soccerhub.pipelines.supa import push_to_supabase
 from soccerhub.pipelines.xref import build_player_xref
@@ -11,6 +11,7 @@ from soccerhub.pipelines.xref import build_player_xref
 __all__ = [
     "build_player_xref",
     "build_player_season",
+    "current_season",
     "push_to_supabase",
     "push_transfers",
     "push_age_curve",
