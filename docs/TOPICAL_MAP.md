@@ -237,16 +237,28 @@ don't patch prose.
 
 ---
 
-**[B8] CI / automation**
-- What: one workflow. `run-season.yml`: cron Mon+Thu 06:00 UTC, five jobs —
-  `seasons` (5-league matrix, `max-parallel: 1` for FBref IP-block protection),
-  `transfers`, `matches` (5-league matrix, full parallel — plain CSV, no scrape
-  risk), `club-elo` (daily snapshot), `age-curve` (needs: seasons — derived from
-  the hub). `workflow_dispatch` takes a season override. Site deploy is not a
-  workflow — Netlify builds from `netlify.toml` on push to main.
-- Where: `.github/workflows/run-season.yml`, `netlify.toml`.
-- Note: `SEASON` default is hardcoded "2025" — bump each August. The five-job
-  pipeline has not yet had a green scheduled run — verify after next merge.
+**[B8] CI / automation — split by IP trust**
+- What: the refresh runs in two places, split on whether the source needs a browser.
+  - GitHub Actions `run-season.yml`, cron Mon+Thu 06:00 UTC, three jobs:
+    `transfers`, `matches` (5-league matrix, full parallel — plain CSV), `club-elo`
+    (tolerates a fetch failure and emits a `::warning::` instead of failing the run).
+  - This Mac, launchd `com.ikarthik.soccerhub-fbref`, Mon+Thu 06:00 local:
+    `scripts/refresh_fbref_chain.py` runs seasons -> understat -> age_curve for all
+    five leagues. Ordered, not parallel — understat and age_curve update rows that
+    `run_season` writes.
+- Why split: FBref sits behind a Cloudflare interactive challenge. `soccerdata`
+  clears it with a real Chrome (`class FBref(BaseSeleniumReader)`) but only from a
+  residential IP. On a runner the browser starts, burns all five attempts and raises
+  `Could not download https://fbref.com/en/comps/`. Verified 2026-09-28: identical
+  code returned 551 rows locally and failed on every runner. Adding Chrome or Xvfb
+  to CI does not help — Chrome was already there.
+- Season: derived from the date by `current_season()` (August cutover), so nothing
+  needs an annual bump. Override with `SEASON=` for a backfill.
+- Where: `.github/workflows/run-season.yml`, `Soccer Data Hub/scripts/`,
+  `~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist`, `netlify.toml`.
+- Note: launchd skips a fire while the Mac sleeps and catches up on wake, so a
+  refresh can land late. Logs: `~/.soccerhub/logs/fbref-{out,err}.log`.
+- Note: the workflow is still named `run-season` though `seasons` now runs locally.
 
 ---
 
@@ -301,10 +313,11 @@ No writes. Anon key only; RLS blocks everything but SELECT.
 
 ---
 
-**C2 · Cron season refresh (write path)**
+**C2 · Cron season refresh (write path)** — runs on this Mac, not CI (see B8)
 
 ```
-run-season.yml (cron Mon+Thu / workflow_dispatch)
+launchd com.ikarthik.soccerhub-fbref (Mon+Thu 06:00 local)
+  └──> scripts/refresh_fbref_chain.py   season = SEASON or current_season()
   └──> run_season(league, season, force=True)          pipelines/__init__.py:34
          ├──> build_player_xref(refetch=True)          pipelines/xref.py:69
          │      ├──> fetch_fbref_season(force=True)    readers/fbref.py:54
@@ -320,7 +333,8 @@ run-season.yml (cron Mon+Thu / workflow_dispatch)
                                                        key: league,season,team,player_name
 ```
 Side effects live in app code only — no DB triggers. Upsert never deletes (orphan risk
-on key changes).
+on key changes). After the five leagues, the same script runs understat then age_curve —
+both update rows this stage writes, so the order is load-bearing.
 
 ---
 

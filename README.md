@@ -8,7 +8,8 @@ FBref · Transfermarkt · StatsBomb
         │  soccerhub readers (fetch → parquet cache → manifest)
         v
   pipelines: xref (entity resolution) → player_season (merge + clean)
-        │  GitHub Actions cron, Mon + Thu
+        │  Mon + Thu — Actions cron (HTTP sources)
+        │           + local launchd (FBref, see docs/TOPICAL_MAP.md B8)
         v
   Supabase Postgres  ←  source of truth (RLS: anon read-only)
         │
