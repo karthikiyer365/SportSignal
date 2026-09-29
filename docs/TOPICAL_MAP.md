@@ -398,7 +398,7 @@ one-off backfill (done):
 **C4 · Landing/site deploy**
 
 ```
-git push main ──> Netlify build hook ──> publish site/ ──> *.netlify.app
+git push main ──> Netlify build hook ──> publish site/ ──> sports.karthikiyer.info
   └──> /api/ask rewrite ──> soccerhub-agent.onrender.com/ask  (see C5)
 ```
 Netlify chosen over GitHub Pages: Pages is static-only and cannot rewrite
