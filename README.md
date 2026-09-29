@@ -28,7 +28,7 @@ See [`Soccer Data Hub/README.md`](Soccer%20Data%20Hub/README.md).
 ### 2. Site (`site/`)
 Static dashboards on Netlify reading Supabase directly (anon key, select-only).
 Live: pitch-themed landing + player dashboard (career values, G+A, transfers).
-Live at <https://fivethreetwo.netlify.app>.
+Live at <https://sports.karthikiyer.info> (Netlify custom domain).
 Deployed by Netlify on push to main (`netlify.toml`, publish dir `site/`).
 `netlify.toml` also rewrites `/api/ask` to the Render agent — same-origin, no CORS.
 
