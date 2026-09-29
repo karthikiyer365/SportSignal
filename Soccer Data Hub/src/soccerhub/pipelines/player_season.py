@@ -1,4 +1,6 @@
 """Merged player-season table: FBref stats + Transfermarkt market value."""
+from datetime import date
+
 import pandas as pd
 
 from soccerhub.cache import cached_fetch
@@ -83,6 +85,19 @@ def extra_stats(league: str, season: str, stat_type: str, canon: dict,
 def season_end(season: str) -> str:
     """'2023' (2023-24 season) -> '2024-06-30'."""
     return f"{int(season) + 1}-06-30"
+
+
+# European seasons start in August, so Jan-Jul still belongs to the year before.
+SEASON_START_MONTH = 8
+
+
+def current_season(today: date | None = None) -> str:
+    """Canonical start year of the season in progress: '2026' = 2026-27.
+
+    Derived from the date so the schedule never needs an annual bump.
+    """
+    d = today or date.today()
+    return str(d.year - (1 if d.month < SEASON_START_MONTH else 0))
 
 
 RATE_COLS = [

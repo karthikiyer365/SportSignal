@@ -16,6 +16,7 @@ from soccerhub.readers.understat import fetch_understat
 from soccerhub.pipelines import (
     build_player_season,
     build_player_xref,
+    current_season,
     push_age_curve,
     push_club_elo,
     push_club_elo_history,
@@ -43,6 +44,7 @@ __all__ = [
     "fetch_transfermarkt_values",
     "build_player_xref",
     "build_player_season",
+    "current_season",
     "push_to_supabase",
     "push_transfers",
     "push_age_curve",

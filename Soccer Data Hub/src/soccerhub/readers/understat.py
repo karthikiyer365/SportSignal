@@ -30,7 +30,8 @@ def fetch_understat(league: str, season: str, dataset: str = "player_season",
     import soccerdata as sd  # lazy: keeps the heavy scraper stack off import time
 
     def produce():
-        u = sd.Understat(leagues=league, seasons=_season_to_code(season))
+        u = sd.Understat(leagues=league, seasons=_season_to_code(season),
+                         no_cache=force)  # see fbref.py: force must reach soccerdata's html cache
         if dataset == "shots":
             return _shots_skipping_bad_matches(u)
         return getattr(u, DATASETS[dataset])().reset_index()

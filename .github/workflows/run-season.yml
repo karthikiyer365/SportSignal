@@ -6,46 +6,8 @@ on:
   schedule:
     - cron: "0 6 * * 1,4"
   workflow_dispatch:
-    inputs:
-      season:
-        default: "2025"
-
-env:
-  SEASON: ${{ github.event.inputs.season || '2025' }}  # bump each August
 
 jobs:
-  seasons:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1  # serialize: parallel FBref scraping trips their IP block
-      matrix:
-        league:
-          - "ENG-Premier League"
-          - "ESP-La Liga"
-          - "GER-Bundesliga"
-          - "ITA-Serie A"
-          - "FRA-Ligue 1"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
-      - name: run pipeline (current season force-refetch)
-        working-directory: Soccer Data Hub
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          LEAGUE: ${{ matrix.league }}
-        run: |
-          python -c "
-          import os
-          from soccerhub import run_season
-          m = run_season(os.environ['LEAGUE'], os.environ['SEASON'], force=True)
-          print(m)
-          "
-
   transfers:
     runs-on: ubuntu-latest
     steps:
@@ -91,8 +53,8 @@ jobs:
         run: |
           python -c "
           import os
-          from soccerhub import push_matches
-          print(push_matches(os.environ['LEAGUE'], os.environ['SEASON'], force=True))
+          from soccerhub import current_season, push_matches
+          print(push_matches(os.environ['LEAGUE'], os.environ.get('SEASON') or current_season(), force=True))
           "
 
   club-elo:
@@ -111,63 +73,12 @@ jobs:
         run: |
           python -c "
           from soccerhub import push_club_elo
-          print(push_club_elo(force=True))
+          from soccerhub.errors import SoccerhubError
+          # A dead upstream must not fail the run — the Elo snapshot is daily, one gap is
+          # harmless. Only fetch errors are tolerated; anything else still fails loudly.
+          try:
+              print(push_club_elo(force=True))
+          except SoccerhubError as exc:
+              print(f'::warning title=club-elo skipped::{exc}')
           "
 
-  understat:
-    needs: seasons  # player-xg updates rows the seasons job just wrote
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        league:
-          - "ENG-Premier League"
-          - "ESP-La Liga"
-          - "GER-Bundesliga"
-          - "ITA-Serie A"
-          - "FRA-Ligue 1"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
-      - name: refresh understat xg (player, team-match, shots)
-        working-directory: Soccer Data Hub
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # read side of player-xg matching; key is public by design (in site JS)
-          SUPABASE_PUBLISHABLE_KEY: "sb_publishable_Qy0bJ4CdrxffuJGNq12ebw_r0-Z3qD-"
-          LEAGUE: ${{ matrix.league }}
-        run: |
-          python -c "
-          import os
-          from soccerhub import push_player_xg, push_shots, push_team_match
-          lg, ss = os.environ['LEAGUE'], os.environ['SEASON']
-          print('player_xg', push_player_xg(lg, ss, force=True))
-          print('team_match', push_team_match(lg, ss, force=True))
-          print('shots', push_shots(lg, ss, force=True))
-          "
-
-  age-curve:
-    needs: seasons  # derived from player_season — run after it refreshes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
-      - name: rebuild age_curve table
-        working-directory: Soccer Data Hub
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # read side of the job; this key is public by design (shipped in site JS)
-          SUPABASE_PUBLISHABLE_KEY: "sb_publishable_Qy0bJ4CdrxffuJGNq12ebw_r0-Z3qD-"
-        run: |
-          python -c "
-          from soccerhub import push_age_curve
-          print(push_age_curve())
-          "

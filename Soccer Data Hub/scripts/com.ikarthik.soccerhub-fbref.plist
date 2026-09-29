@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs the FBref-sourced chain (seasons -> understat -> age_curve) on this Mac.
+  These stages cannot run on GitHub Actions: FBref's Cloudflare challenge refuses
+  datacenter IPs.
+
+  One league per weekday at 06:00 local, picked by the script from the weekday:
+  Mon=ENG, Tue=ESP, Wed=GER, Thu=ITA, Fri=FRA. All five in one pass trips FBref's
+  per-IP limit (measured 2026-09-29: league 1 took 35 min, league 2 was refused),
+  so each league refreshes weekly instead of the five bursting twice weekly.
+
+  Install:  cp "Soccer Data Hub/scripts/com.ikarthik.soccerhub-fbref.plist" ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist
+  Run now:  launchctl kickstart -p gui/$(id -u)/com.ikarthik.soccerhub-fbref
+  Remove:   launchctl bootout gui/$(id -u)/com.ikarthik.soccerhub-fbref
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ikarthik.soccerhub-fbref</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/ikarthik/Documents/GitHub/Everything-Football-Soccer/Soccer Data Hub/.venv/bin/python</string>
+        <string>/Users/ikarthik/Documents/GitHub/Everything-Football-Soccer/Soccer Data Hub/scripts/refresh_fbref_chain.py</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>1</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>3</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>4</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>HOME</key>
+        <string>/Users/ikarthik</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/ikarthik/.soccerhub/logs/fbref-out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ikarthik/.soccerhub/logs/fbref-err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

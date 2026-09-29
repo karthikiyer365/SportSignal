@@ -69,3 +69,6 @@ Thumbs.db
 .agents/
 .claude/
 skills-lock.json
+
+# seleniumbase creates this next to the hub when soccerdata drives Chrome
+Soccer Data Hub/downloaded_files/

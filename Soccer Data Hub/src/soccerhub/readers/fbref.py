@@ -59,7 +59,11 @@ def fetch_fbref_season(
 
     def produce():
         return sd.FBref(
-            leagues=league, seasons=_season_to_code(season)
+            leagues=league, seasons=_season_to_code(season),
+            # soccerdata caches the raw html separately; without this, force only
+            # rebuilds the parquet from a stale page (and a season added upstream
+            # after the cached index was written raises KeyError on its code).
+            no_cache=force,
         ).read_player_season_stats(stat_type=stat_type)
 
     # legacy cache keys for "standard" predate the param — don't invalidate them
