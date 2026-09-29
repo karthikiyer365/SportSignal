@@ -3,7 +3,12 @@
 <!--
   Runs the FBref-sourced chain (seasons -> understat -> age_curve) on this Mac.
   These stages cannot run on GitHub Actions: FBref's Cloudflare challenge refuses
-  datacenter IPs. Mon + Thu 06:00 local, matching the CI cron for the other sources.
+  datacenter IPs.
+
+  One league per weekday at 06:00 local, picked by the script from the weekday:
+  Mon=ENG, Tue=ESP, Wed=GER, Thu=ITA, Fri=FRA. All five in one pass trips FBref's
+  per-IP limit (measured 2026-09-29: league 1 took 35 min, league 2 was refused),
+  so each league refreshes weekly instead of the five bursting twice weekly.
 
   Install:  cp "Soccer Data Hub/scripts/com.ikarthik.soccerhub-fbref.plist" ~/Library/LaunchAgents/
             launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist
@@ -31,7 +36,31 @@
         </dict>
         <dict>
             <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>3</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
             <integer>4</integer>
+            <key>Hour</key>
+            <integer>6</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
             <key>Hour</key>
             <integer>6</integer>
             <key>Minute</key>

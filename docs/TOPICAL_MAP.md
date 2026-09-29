@@ -242,10 +242,12 @@ don't patch prose.
   - GitHub Actions `run-season.yml`, cron Mon+Thu 06:00 UTC, three jobs:
     `transfers`, `matches` (5-league matrix, full parallel — plain CSV), `club-elo`
     (tolerates a fetch failure and emits a `::warning::` instead of failing the run).
-  - This Mac, launchd `com.ikarthik.soccerhub-fbref`, Mon+Thu 06:00 local:
-    `scripts/refresh_fbref_chain.py` runs seasons -> understat -> age_curve for all
-    five leagues. Ordered, not parallel — understat and age_curve update rows that
-    `run_season` writes.
+  - This Mac, launchd `com.ikarthik.soccerhub-fbref`, 06:00 local Mon-Fri, **one
+    league per weekday** (Mon=ENG, Tue=ESP, Wed=GER, Thu=ITA, Fri=FRA — the script
+    picks it from the weekday, so the plist needs no per-day config):
+    `scripts/refresh_fbref_chain.py` runs seasons -> understat -> age_curve. Ordered,
+    not parallel — understat and age_curve update rows that `run_season` writes.
+    `LEAGUE=<name>` re-runs a missed day; `--all` does five (expect a block).
 - Why split: FBref sits behind a Cloudflare interactive challenge. `soccerdata`
   clears it with a real Chrome (`class FBref(BaseSeleniumReader)`) but only from a
   residential IP. On a runner the browser starts, burns all five attempts and raises
@@ -256,8 +258,17 @@ don't patch prose.
   needs an annual bump. Override with `SEASON=` for a backfill.
 - Where: `.github/workflows/run-season.yml`, `Soccer Data Hub/scripts/`,
   `~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist`, `netlify.toml`.
+- Why one league per day: the pipeline pulls three FBref pages per league
+  (`standard`, `misc`, `keeper`), each behind its own challenge. All five leagues in
+  one pass is 15 gated fetches and trips FBref's per-IP limit. Measured 2026-09-29:
+  ENG completed in 35 min, ESP got 2 of 3 pages then was refused with "failed
+  CAPTCHA, IP block or network issues", and the run was abandoned. Spread over
+  weekdays each league still refreshes weekly — better than a twice-weekly target
+  that cannot finish.
 - Note: launchd skips a fire while the Mac sleeps and catches up on wake, so a
   refresh can land late. Logs: `~/.soccerhub/logs/fbref-{out,err}.log`.
+- Note: soccerdata leaks a `uc_driver` process per retry (it re-inits without
+  quitting the dead session); the script reaps them at exit.
 - Note: the workflow is still named `run-season` though `seasons` now runs locally.
 
 ---

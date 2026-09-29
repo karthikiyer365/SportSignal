@@ -9,14 +9,22 @@ reads FBref runs here instead, on the twice-weekly schedule launchd owns.
 The three stages are ordered, not independent: understat and age_curve both update rows
 that run_season writes, so they must follow it in the same pass.
 
+One league per weekday. All five in one pass is 15 challenge-gated FBref fetches, which
+trips their per-IP limit: measured 2026-09-29, the first league completed in 35 min and
+the second was refused partway with "failed CAPTCHA, IP block or network issues".
+
 Run ``--dry-run`` to check env + imports without touching the network.
+``LEAGUE=<name>`` does one named league, ``--all`` does all five (expect a block).
 """
+import atexit
 import os
+import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent
+# Order is the schedule: index 0 runs Monday, 4 runs Friday.
 LEAGUES = [
     "ENG-Premier League",
     "ESP-La Liga",
@@ -24,6 +32,27 @@ LEAGUES = [
     "ITA-Serie A",
     "FRA-Ligue 1",
 ]
+
+
+def leagues_for_today(today: date) -> list[str]:
+    """Which leagues this invocation should refresh."""
+    if os.environ.get("LEAGUE"):
+        return [os.environ["LEAGUE"]]
+    if "--all" in sys.argv:
+        return LEAGUES
+    weekday = today.weekday()  # Mon=0
+    return [LEAGUES[weekday]] if weekday < len(LEAGUES) else []
+
+
+def reap_orphan_drivers() -> None:
+    """Kill uc_driver processes soccerdata left behind.
+
+    Each retry calls _init_webdriver() again without quitting the dead session, so a
+    run with retries leaks one driver per attempt — 5 were still resident after the
+    2026-09-29 run. Scoped to this venv's path so another project's drivers survive.
+    """
+    driver = HUB / ".venv/lib/python3.11/site-packages/seleniumbase/drivers/uc_driver"
+    subprocess.run(["pkill", "-f", str(driver)], check=False)
 
 
 def load_env(path: Path) -> None:
@@ -63,15 +92,21 @@ def main() -> int:
     from soccerhub.errors import SoccerhubError
 
     season = os.environ.get("SEASON") or current_season()
-    log(f"season {season}{' (dry run)' if dry_run else ''}")
+    todays = leagues_for_today(date.today())
+    log(f"season {season}, leagues {todays or '(none — weekend)'}"
+        f"{' (dry run)' if dry_run else ''}")
     if dry_run:
-        log(f"OK env + imports fine, {len(LEAGUES)} leagues configured")
+        log("OK env + imports fine")
+        return 0
+    if not todays:
         return 0
 
-    # One league's failure must not cost the other four — FBref blocks per-IP, per-day,
-    # so a later league can still succeed after an earlier one is refused.
+    atexit.register(reap_orphan_drivers)
+
+    # One league's failure must not cost the rest — FBref blocks per-IP, per-day, so a
+    # later league can still succeed after an earlier one is refused.
     failures = []
-    for league in LEAGUES:
+    for league in todays:
         try:
             log(f"seasons  {league}: {run_season(league, season, force=True)}")
         except SoccerhubError as exc:
