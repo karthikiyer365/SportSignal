@@ -76,12 +76,14 @@
       <div class="chartbox" id="zones"><div class="empty">Loading…</div></div>
       <div class="squad" id="table"></div>
     </div>
-    <p class="cap">Sum of the value of every action the team started in each ninth of the pitch,
-       attacking left to right. Green adds goal threat, red gives it away. League table: click a team
-       to switch; built from the season's results (points, then goal difference, then goals scored),
-       Value = the team's season total. Totals mix how often
-       (volume) with how good each touch is (quality); per-action value and the league comparison
-       are not shown yet.</p>
+    <p class="cap">30 zones, team attacking left to right: 6 bands of 17.5 m × 5 lanes (wings,
+       half-spaces, centre; lanes cut at the penalty-box and six-yard-box edges). Big number and colour =
+       value per 100 actions the team started there: how dangerous a typical touch in that zone was
+       (quality). Small line and colour = the gap to the league average in that zone (all teams in
+       this league-season): green = more dangerous per touch than the league there, red = less.
+       Season totals and action counts are in the tooltip. League table: click a team to switch;
+       built from the season's results (points, then goal difference, then goals scored),
+       Value = the team's season total.</p>
   </div>
 
   <div class="box">
@@ -142,8 +144,6 @@ const MIN_MINUTES_RANK = 900;     // same floor as the pipeline's ranking views
 const PW = 105, PH = 68, S = 6, M = 12;
 const X = x => M + x * S, Y = y => M + (PH - y) * S;
 const W = PW * S + 2 * M, H = PH * S + 2 * M;
-const THIRDS = [["own", 0, 35], ["middle", 35, 70], ["attacking", 70, 105]];
-const LANES = [["right", 0, PH / 3], ["centre", PH / 3, 2 * PH / 3], ["left", 2 * PH / 3, PH]];
 
 const esc = s => String(s).replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -155,6 +155,7 @@ const hideTip = () => tipEl().style.display="none";
 const getJSON = async path => { const r = await fetch(`${DATA}${league}/${path}`, {cache: "no-cache"});
   if(!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const f1 = v => (v >= 0 ? "+" : "") + v.toFixed(1);
+const f2 = v => (v >= 0 ? "+" : "") + v.toFixed(2);
 const f3 = v => (v >= 0 ? "+" : "") + v.toFixed(3);
 
 let PLAYERS = [], ZONES = [], GAMES = {}, team = null, pid = null, acts = null;
@@ -172,20 +173,29 @@ function pitchLines(){
 
 /* ---------- zones ---------- */
 function drawZones(){
+  // 6 x 5 grid (wings, half-spaces, centre); each zone row carries its own rectangle from the pipeline
   const rows = ZONES.filter(z => z.team_id === team);
-  const byZone = Object.fromEntries(rows.map(z => [z.start_zone, z]));
-  const max = Math.max(...rows.map(z => Math.abs(z.vaep_total)), 1e-9);
-  const cells = THIRDS.flatMap(([t, x0, x1]) => LANES.map(([l, y0, y1]) => {
-    const z = byZone[`${t}-${l}`] || {vaep_total: 0, n_actions: 0, start_zone: `${t}-${l}`};
-    const a = (.1 + .65 * Math.abs(z.vaep_total) / max).toFixed(2);
-    const fill = z.vaep_total >= 0 ? `rgba(143,209,138,${a})` : `rgba(240,125,115,${a})`;
-    const cx = X((x0 + x1) / 2), cy = Y((y0 + y1) / 2);
-    return `<g data-z="${z.start_zone}">
-      <rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*S}" height="${(y1-y0)*S}" fill="${fill}"/>
-      <text x="${cx}" y="${cy}" text-anchor="middle" font-size="20" font-weight="700"
-        fill="var(--line)" style="font-size:20px">${f1(z.vaep_total)}</text>
-      <text x="${cx}" y="${cy + 18}" text-anchor="middle">${z.n_actions.toLocaleString()} actions</text></g>`;
-  })).join("");
+  const byZone = Object.fromEntries(rows.map(z => [z.zone, z]));
+  // quality, not volume: value per 100 actions started in the zone (raw per-action values are ~0.01)
+  const rate = z => z && z.n_actions ? 100 * z.vaep_total / z.n_actions : 0;
+  // league average per zone = all teams' value there / all teams' actions there (this team included)
+  const lg = {};
+  ZONES.forEach(z => { const t = lg[z.zone] ??= {vaep_total: 0, n_actions: 0};
+    t.vaep_total += z.vaep_total; t.n_actions += z.n_actions; });
+  const diff = z => rate(z) - rate(lg[z.zone]);
+  // colour = above (green) or below (red) the league in that zone, strength = size of the gap
+  const max = Math.max(...rows.map(z => Math.abs(diff(z))), 1e-9);
+  const cells = rows.map(z => {
+    const a = (.1 + .65 * Math.abs(diff(z)) / max).toFixed(2);
+    const fill = diff(z) >= 0 ? `rgba(143,209,138,${a})` : `rgba(240,125,115,${a})`;
+    const cx = X((z.x0 + z.x1) / 2), cy = Y((z.y0 + z.y1) / 2);
+    return `<g data-z="${z.zone}">
+      <rect x="${X(z.x0)}" y="${Y(z.y1)}" width="${(z.x1 - z.x0) * S}" height="${(z.y1 - z.y0) * S}" fill="${fill}"
+        stroke="var(--card)" stroke-opacity=".5"/>
+      <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-weight="700" fill="var(--line)"
+        style="font-size:15px">${f2(rate(z))}</text>
+      <text x="${cx}" y="${cy + 16}" text-anchor="middle" style="font-size:9.5px">${f2(diff(z))} vs avg</text></g>`;
+  }).join("");
   const el = document.getElementById("zones");
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="zonesvg"
     aria-label="Value created by zone, team attacking left to right">${cells}${pitchLines()}
@@ -197,8 +207,9 @@ function drawZones(){
     const g = e.target.closest("g[data-z]");
     if(!g){ hideTip(); return; }
     const z = byZone[g.dataset.z];
-    showTip(e, `<div class="t">${esc(g.dataset.z.replace("-", " · "))}</div>
-      ${z ? `${f1(z.vaep_total)} value from ${z.n_actions.toLocaleString()} actions` : "no actions"}`);
+    const [band, ...lane] = g.dataset.z.split("-");
+    showTip(e, `<div class="t">${["own box", "own third", "own half", "opp half", "final third", "opp box"][band]} · ${esc(lane.join(" "))}</div>
+      ${z ? `${f2(rate(z))} per 100 actions · league ${f2(rate(lg[z.zone]))} (${f2(diff(z))})<br>${f1(z.vaep_total)} total from ${z.n_actions.toLocaleString()} actions` : "no actions"}`);
   });
   svg.addEventListener("mouseleave", hideTip);
 }
