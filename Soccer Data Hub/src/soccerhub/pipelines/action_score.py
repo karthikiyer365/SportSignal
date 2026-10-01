@@ -6,6 +6,7 @@ Spec: docs/superpowers/specs/2026-10-01-action-score-design.md
 """
 import json
 import os
+import time
 from pathlib import Path
 
 import numpy as np
@@ -238,8 +239,15 @@ def upload_player_actions(league_dir) -> int:
     bucket = _storage().from_(BUCKET)
     files = sorted((league_dir / "player_actions").glob("*.json"))
     for f in files:
-        bucket.upload(f"{league_dir.name}/player_actions/{f.name}", f.read_bytes(),
-                      {"content-type": "application/json", "upsert": "true", "cache-control": "86400"})
+        for attempt in range(3):  # a TLS blip over ~4,800 sequential uploads must not end the run
+            try:
+                bucket.upload(f"{league_dir.name}/player_actions/{f.name}", f.read_bytes(),
+                              {"content-type": "application/json", "upsert": "true", "cache-control": "86400"})
+                break
+            except Exception:  # ponytail: retries every error; a real 403 just fails 3 times, then raises
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
     return len(files)
 
 
@@ -271,11 +279,17 @@ def build_action_score(
     return {"games": src["games"], "players": src["players"], "actions_vaep": actions_m}
 
 
+def selected(only) -> list[tuple[str, str]]:
+    """League-seasons to run: league names narrow the leagues AND years narrow the seasons."""
+    leagues = {o for o in only if o in {lg for lg, _ in LEAGUE_SEASONS}}
+    seasons = {o for o in only if o in {s for _, s in LEAGUE_SEASONS}}
+    return [k for k in LEAGUE_SEASONS if (not leagues or k[0] in leagues) and (not seasons or k[1] in seasons)]
+
+
 def main(force: bool = False, only=(), upload: bool = False):
-    """Rate and export every league-season, or only those matching `only` (league names or seasons)."""
-    for (league, season), (provider, competition_id, season_id) in LEAGUE_SEASONS.items():
-        if only and league not in only and season not in only:
-            continue
+    """Rate and export every league-season, or only the ones `selected(only)` picks."""
+    for league, season in selected(only):
+        provider, competition_id, season_id = LEAGUE_SEASONS[(league, season)]
         print(f"\n===== {league} {season}/{int(season[2:]) + 1} ({provider}) =====")
         m = build_action_score(competition_id, season_id, force=force, provider=provider)
         games, players = pd.read_parquet(m["games"].path), pd.read_parquet(m["players"].path)

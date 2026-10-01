@@ -234,3 +234,38 @@ def test_unknown_player_placeholder_is_not_a_player(season):
                                                  "player_id": 0, "player_name": None, "minutes_played": 7}])])
     rated = add_zone(rate_out_of_fold(games, actions), games)
     assert 0 not in set(player_table(rated, players).player_id)
+
+
+def test_cli_filter_means_league_and_season():
+    """`action_score "ENG-Premier League" 2015` must pick exactly one league-season, not either."""
+    from soccerhub.pipelines.action_score import selected
+
+    assert selected(["ENG-Premier League", "2015"]) == [("ENG-Premier League", "2015")]
+    assert len(selected(["2017"])) == 5
+    assert selected(["ESP-La Liga"]) == [("ESP-La Liga", "2015"), ("ESP-La Liga", "2017")]
+    assert len(selected([])) == 9
+
+
+def test_upload_retries_a_dropped_connection(tmp_path, monkeypatch):
+    """One TLS blip must not kill a 4,800-file upload."""
+    from soccerhub.pipelines import action_score as a
+
+    league = tmp_path / "eng-premier-league-2015"
+    (league / "player_actions").mkdir(parents=True)
+    (league / "player_actions" / "100.json").write_text("{}")
+    calls = []
+
+    class Bucket:
+        def upload(self, path, file, file_options):
+            calls.append(path)
+            if len(calls) == 1:
+                raise ConnectionError("ssl/tls alert bad record mac")
+
+    class Storage:
+        def from_(self, name):
+            return Bucket()
+
+    monkeypatch.setattr(a, "_storage", lambda: Storage())
+    monkeypatch.setattr(a.time, "sleep", lambda s: None)
+    assert a.upload_player_actions(league) == 1
+    assert len(calls) == 2
