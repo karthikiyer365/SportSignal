@@ -37,7 +37,7 @@ LANES = ["right", "centre", "left"]  # after left->right flip, low y = right fla
 SITE_DIR = Path(__file__).resolve().parents[4] / "site" / "data" / "action_score"
 
 
-def site_dir(league: str, season: str = "2015") -> Path:
+def site_dir(league: str, season: str) -> Path:
     """One folder per league-season, e.g. site/data/action_score/esp-la-liga-2015."""
     return SITE_DIR / f"{league.lower().replace(' ', '-')}-{season}"
 
@@ -194,7 +194,7 @@ def _player_file(df: pd.DataFrame) -> dict:
     }
 
 
-def export_action_score_site(games, players, rated, table, out_dir=SITE_DIR) -> dict[str, int]:
+def export_action_score_site(games, players, rated, table, out_dir) -> dict[str, int]:
     """Write the Team Analysis files for one league-season. Returns bytes per file.
 
     players / zones / games are small and live in git. player_actions/ holds every action
