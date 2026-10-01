@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Analysis — SportSignal</title>
+<meta name="description" content="How a team plays, from the value of every on-ball action: where it creates value, its best and worst moments, and who carries the ball.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* chrome copied from match.html; table.log from player.html */
+  .disp{font-family:"Avenir Next Condensed","Arial Narrow","Helvetica Neue Condensed",Impact,sans-serif;
+        text-transform:uppercase;letter-spacing:.04em;font-stretch:condensed}
+  .top h1{margin:0;font-size:1.05rem;color:var(--soft);font-weight:400}
+  main{max-width:1060px;margin:0 auto;padding:24px 20px 80px}
+  .lede{margin:0 0 12px;color:var(--soft);font-size:.9rem}
+  .chips{margin:0 0 10px}
+
+  .box{background:var(--card);border:1px solid var(--border);border-radius:6px;
+       padding:16px;margin-top:14px}
+  .box h2{margin:0 0 8px;font-size:.8rem;letter-spacing:.16em;
+        text-transform:uppercase;color:var(--tag);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .box h2 .plain{color:var(--muted);letter-spacing:0;text-transform:none}
+  .box p.cap{margin:8px 0 0;font-size:12px;color:var(--muted)}
+  .swatch{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .chartbox{position:relative}
+  .chartbox svg{width:100%;height:auto;display:block}
+  svg text{font:11px system-ui;fill:var(--axis)}
+  .empty{padding:50px 16px}
+
+  #matchsel{padding:6px 12px;border-radius:999px;border:1px solid var(--border);
+       background:var(--grass);color:var(--line);font:inherit;font-size:.85rem}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+  @media(max-width:760px){.duo{grid-template-columns:1fr}}
+  .duo h3{margin:0 0 4px;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase}
+
+  .scroll{overflow-x:auto}
+  table.log{border-collapse:collapse;width:100%;font-size:.85rem}
+  table.log th,table.log td{padding:6px 10px;text-align:right;border-top:1px solid rgba(242,245,239,.08)}
+  table.log th{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tag);
+     font-weight:600}
+  table.log th:first-child,table.log td:first-child,
+  table.log th:nth-child(2),table.log td:nth-child(2){text-align:left}
+  table.log tbody tr:hover{background:rgba(255,180,58,.06)}
+  .dim{color:var(--muted)}
+
+  #tip{position:fixed;z-index:9;pointer-events:none;display:none;background:#10221a;
+       border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:.8rem;
+       color:var(--line);box-shadow:0 10px 28px rgba(16,24,40,.35)}
+  #tip .t{color:var(--tag);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="home disp" href="index.html">SportSignal</a>
+  <h1>Team Analysis</h1>
+</nav>
+
+<main>
+  <p class="lede">Action Score · Premier League 2015/16 · every on-ball action valued by how much it
+     changed the team's chance of scoring minus its chance of conceding (VAEP, StatsBomb open data).</p>
+  <div class="chips" id="teamchips"></div>
+
+  <div class="box">
+    <h2>Where they create value <span class="plain" id="zonemeta"></span></h2>
+    <div class="chartbox" id="zones"><div class="empty">Loading…</div></div>
+    <p class="cap">Sum of the value of every action the team started in each ninth of the pitch,
+       attacking left to right. Green adds goal threat, red gives it away. Totals mix how often
+       (volume) with how good each touch is (quality); per-action value and the league comparison
+       are not shown yet.</p>
+  </div>
+
+  <div class="box">
+    <h2>Moments <span class="plain"><select id="matchsel" aria-label="Choose a match"></select></span></h2>
+    <div class="chartbox" id="moments"><div class="empty">Loading…</div></div>
+    <div class="duo" id="momentlists"></div>
+    <p class="cap"><span class="swatch" style="background:var(--amber)"></span> the 10 actions that
+       raised the team's goal odds most in this match ·
+       <span class="swatch" style="background:var(--red)"></span> the 10 that cost most.
+       Arrows run from where the action started to where it ended, team attacking left to right.</p>
+  </div>
+
+  <div class="box">
+    <h2>Who carries the ball <span class="plain" id="playermeta"></span></h2>
+    <div class="scroll" id="players"><div class="empty">Loading…</div></div>
+    <p class="cap">Tiers are league-wide thirds of value per 90 among players with at least 900
+       minutes. Rating the same players on alternate halves of the season agrees only weakly
+       (Spearman 0.31), so players inside a tier are interchangeable — read the tier, not the
+       order. On-ball only: runs and positioning are invisible and defenders are undervalued.</p>
+  </div>
+</main>
+<div id="tip" role="status"></div>
+
+<script>
+const DATA = "data/action_score/";
+const DEFAULT_TEAM = 22;          // Leicester City — the season's story
+const MIN_MINUTES_RANK = 900;     // same floor as the pipeline's ranking views
+// pitch in SPADL metres, drawn horizontally; team attacks left -> right.
+// SPADL y=0 is the attacking team's RIGHT flank, so it sits at the bottom.
+const PW = 105, PH = 68, S = 6, M = 12;
+const X = x => M + x * S, Y = y => M + (PH - y) * S;
+const W = PW * S + 2 * M, H = PH * S + 2 * M;
+const THIRDS = [["own", 0, 35], ["middle", 35, 70], ["attacking", 70, 105]];
+const LANES = [["right", 0, PH / 3], ["centre", PH / 3, 2 * PH / 3], ["left", 2 * PH / 3, PH]];
+
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tipEl = () => document.getElementById("tip");
+const showTip = (e, html) => { const t=tipEl(); t.innerHTML=html; t.style.display="block";
+  t.style.left=Math.min(e.clientX+14, innerWidth-200)+"px"; t.style.top=(e.clientY+14)+"px"; };
+const hideTip = () => tipEl().style.display="none";
+const getJSON = async path => { const r = await fetch(DATA + path);
+  if(!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
+const f1 = v => (v >= 0 ? "+" : "") + v.toFixed(1);
+const f3 = v => (v >= 0 ? "+" : "") + v.toFixed(3);
+
+let PLAYERS = [], ZONES = [], TIERS = null, team = null, moments = [];
+
+function pitchLines(){
+  const L = (x1,y1,x2,y2) => `<line x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}"/>`;
+  const box = (d, w) => [[0, d], [PW, PW - d]].map(([g, e]) =>
+    L(g, PH/2 - w/2, e, PH/2 - w/2) + L(e, PH/2 - w/2, e, PH/2 + w/2) + L(e, PH/2 + w/2, g, PH/2 + w/2)
+  ).join("");
+  return `<g stroke="var(--axis)" stroke-opacity=".45" stroke-width="1.2" fill="none">
+    <rect x="${X(0)}" y="${Y(PH)}" width="${PW*S}" height="${PH*S}"/>
+    ${L(PW/2, 0, PW/2, PH)}<circle cx="${X(PW/2)}" cy="${Y(PH/2)}" r="${9.15*S}"/>
+    ${box(16.5, 40.32)}${box(5.5, 18.32)}</g>`;
+}
+
+/* ---------- tiers: league-wide thirds of per-90, among regulars ---------- */
+function tierCuts(){
+  const v = PLAYERS.filter(p => p.minutes >= MIN_MINUTES_RANK && p.vaep_per90 != null)
+                   .map(p => p.vaep_per90).sort((a,b) => a-b);
+  return {lo: v[Math.floor(v.length/3)], hi: v[Math.floor(2*v.length/3)], n: v.length};
+}
+const tierOf = p => p.minutes < MIN_MINUTES_RANK || p.vaep_per90 == null ? null
+  : p.vaep_per90 >= TIERS.hi ? "Top" : p.vaep_per90 >= TIERS.lo ? "Middle" : "Bottom";
+const TIER_COLOR = {Top:"var(--green)", Middle:"var(--chalk-y)", Bottom:"var(--muted)"};
+
+/* ---------- zones ---------- */
+function drawZones(){
+  const rows = ZONES.filter(z => z.team_id === team);
+  const byZone = Object.fromEntries(rows.map(z => [z.start_zone, z]));
+  const max = Math.max(...rows.map(z => Math.abs(z.vaep_total)), 1e-9);
+  const cells = THIRDS.flatMap(([t, x0, x1]) => LANES.map(([l, y0, y1]) => {
+    const z = byZone[`${t}-${l}`] || {vaep_total: 0, n_actions: 0, start_zone: `${t}-${l}`};
+    const a = (.1 + .65 * Math.abs(z.vaep_total) / max).toFixed(2);
+    const fill = z.vaep_total >= 0 ? `rgba(143,209,138,${a})` : `rgba(240,125,115,${a})`;
+    const cx = X((x0 + x1) / 2), cy = Y((y0 + y1) / 2);
+    return `<g data-z="${z.start_zone}">
+      <rect x="${X(x0)}" y="${Y(y1)}" width="${(x1-x0)*S}" height="${(y1-y0)*S}" fill="${fill}"/>
+      <text x="${cx}" y="${cy}" text-anchor="middle" font-size="20" font-weight="700"
+        fill="var(--line)" style="font-size:20px">${f1(z.vaep_total)}</text>
+      <text x="${cx}" y="${cy + 18}" text-anchor="middle">${z.n_actions.toLocaleString()} actions</text></g>`;
+  })).join("");
+  const el = document.getElementById("zones");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="zonesvg"
+    aria-label="Value created by zone, team attacking left to right">${cells}${pitchLines()}
+    <text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
+  const total = rows.reduce((s, z) => s + z.vaep_total, 0);
+  document.getElementById("zonemeta").textContent = `· season total ${f1(total)}`;
+  const svg = document.getElementById("zonesvg");
+  svg.addEventListener("mousemove", e => {
+    const g = e.target.closest("g[data-z]");
+    if(!g){ hideTip(); return; }
+    const z = byZone[g.dataset.z];
+    showTip(e, `<div class="t">${esc(g.dataset.z.replace("-", " · "))}</div>
+      ${z ? `${f1(z.vaep_total)} value from ${z.n_actions.toLocaleString()} actions` : "no actions"}`);
+  });
+  svg.addEventListener("mouseleave", hideTip);
+}
+
+/* ---------- moments ---------- */
+async function loadMoments(){
+  document.getElementById("moments").innerHTML = `<div class="empty">Loading…</div>`;
+  document.getElementById("momentlists").innerHTML = "";
+  try { moments = await getJSON(`top_actions/${team}.json`); }
+  catch { moments = []; }
+  const games = [...new Map(moments.map(r => [r.game_id, r])).values()]
+    .sort((a,b) => a.game_date.localeCompare(b.game_date));
+  const sel = document.getElementById("matchsel");
+  sel.innerHTML = games.map(g => `<option value="${g.game_id}">${esc(g.game_date)} · vs ${esc(g.opponent_name)}</option>`).join("");
+  sel.onchange = () => drawMoments(+sel.value);
+  if(!games.length){
+    document.getElementById("moments").innerHTML = `<div class="empty">No match data for this team.</div>`;
+    return;
+  }
+  drawMoments(games[0].game_id);
+}
+
+function drawMoments(gameId){
+  const rows = moments.filter(r => r.game_id === gameId);
+  const best = rows.filter(r => r.kind === "best").sort((a,b) => b.vaep_value - a.vaep_value);
+  const worst = rows.filter(r => r.kind === "worst").sort((a,b) => a.vaep_value - b.vaep_value);
+  const shown = [...best, ...worst];
+  const arrows = shown.map((r, i) => {
+    const c = r.kind === "best" ? "var(--amber)" : "var(--red)";
+    return `<g data-i="${i}" stroke="${c}" fill="${c}">
+      <line x1="${X(r.start_x)}" y1="${Y(r.start_y)}" x2="${X(r.end_x)}" y2="${Y(r.end_y)}"
+        stroke-width="2.2" marker-end="url(#head-${r.kind})"/>
+      <circle cx="${X(r.start_x)}" cy="${Y(r.start_y)}" r="4.5" stroke="#10221a" stroke-width="1"/></g>`;
+  }).join("");
+  const head = (id, c) => `<marker id="head-${id}" viewBox="0 0 10 10" refX="8" refY="5"
+    markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`;
+  document.getElementById("moments").innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="momentsvg"
+    aria-label="Best and worst actions of the match"><defs>${head("best","var(--amber)")}${head("worst","var(--red)")}</defs>
+    ${pitchLines()}${arrows}<text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
+
+  const list = (title, rs, c) => `<div><h3 style="color:${c}">${title}</h3>
+    <table class="log nums"><tbody>${rs.map(r => `<tr><td>${r.minute}'</td>
+      <td>${esc(r.player_name ?? "?")} <span class="dim">${esc(r.type_name.replace(/_/g, " "))}${r.result_name === "success" ? "" : " · " + esc(r.result_name)}</span></td>
+      <td>${f3(r.vaep_value)}</td></tr>`).join("")}</tbody></table></div>`;
+  document.getElementById("momentlists").innerHTML =
+    list("Raised goal odds most", best, "var(--amber)") + list("Cost the most", worst, "var(--red)");
+
+  const svg = document.getElementById("momentsvg");
+  svg.addEventListener("mousemove", e => {
+    const g = e.target.closest("g[data-i]");
+    if(!g){ hideTip(); return; }
+    const r = shown[+g.dataset.i];
+    showTip(e, `<div class="t">${r.minute}' · ${esc(r.player_name ?? "?")}</div>
+      ${esc(r.type_name.replace(/_/g, " "))} · ${esc(r.result_name)}<br>value ${f3(r.vaep_value)}`);
+  });
+  svg.addEventListener("mouseleave", hideTip);
+}
+
+/* ---------- players ---------- */
+function drawPlayers(){
+  const rows = PLAYERS.filter(p => p.team_id === team && p.minutes > 0)
+    .map(p => ({...p, tier: tierOf(p)}))
+    .sort((a,b) => (!!b.tier - !!a.tier) || (b.tier ? b.vaep_per90 - a.vaep_per90 : b.minutes - a.minutes));
+  const regulars = rows.filter(p => p.tier).length;
+  document.getElementById("playermeta").textContent =
+    `· ${regulars} with ${MIN_MINUTES_RANK}+ minutes, tiers cut across all ${TIERS.n} such players in the league`;
+  document.getElementById("players").innerHTML = `<table class="log nums">
+    <thead><tr><th>Player</th><th>Tier</th><th>Minutes</th><th>Actions</th><th>Value</th><th>Per 90</th></tr></thead>
+    <tbody>${rows.map(p => `<tr${p.tier ? "" : ' class="dim"'}>
+      <td>${esc(p.player_name)}</td>
+      <td>${p.tier ? `<span class="swatch" style="background:${TIER_COLOR[p.tier]}"></span> ${p.tier}`
+                   : `under ${MIN_MINUTES_RANK}'`}</td>
+      <td>${p.minutes.toLocaleString()}</td><td>${Math.round(p.n_actions).toLocaleString()}</td>
+      <td>${f1(p.vaep_total)}</td><td>${p.vaep_per90 == null ? "—" : p.vaep_per90.toFixed(2)}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+
+/* ---------- team picker + state ---------- */
+function drawChips(){
+  const teams = [...new Map(PLAYERS.map(p => [p.team_id, p.team_name])).entries()]
+    .sort((a,b) => a[1].localeCompare(b[1]));
+  document.getElementById("teamchips").innerHTML = teams.map(([id, name]) =>
+    `<button data-t="${id}" aria-pressed="${id === team}">${esc(name)}</button>`).join("");
+}
+
+function selectTeam(id){
+  team = id;
+  history.replaceState(null, "", `?team=${id}`);
+  drawChips(); drawZones(); drawPlayers(); loadMoments();
+}
+
+document.getElementById("teamchips").addEventListener("click", e => {
+  const b = e.target.closest("button[data-t]");
+  if(b) selectTeam(+b.dataset.t);
+});
+
+(async () => {
+  try {
+    [PLAYERS, ZONES] = await Promise.all([getJSON("players.json"), getJSON("zones.json")]);
+  } catch(err) {
+    document.querySelectorAll(".empty").forEach(el => el.textContent = `Could not load data (${err.message}).`);
+    return;
+  }
+  TIERS = tierCuts();
+  const asked = +new URLSearchParams(location.search).get("team");
+  selectTeam(PLAYERS.some(p => p.team_id === asked) ? asked : DEFAULT_TEAM);
+})();
+</script>
+</body>
+</html>
