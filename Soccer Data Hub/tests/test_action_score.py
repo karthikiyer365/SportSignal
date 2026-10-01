@@ -127,19 +127,25 @@ def test_validation_and_site_export(season, tmp_path):
     assert np.isnan(report["reliability_spearman"])
 
     sizes = a.export_action_score_site(games, players, rated, table, tmp_path)
-    assert set(sizes) == {"players", "zones", "top_actions"}
+    assert set(sizes) == {"players", "zones", "games", "player_actions"}
 
-    # one file per team, so the page loads ~1/20th of the season
-    files = sorted((tmp_path / "top_actions").glob("*.json"))
-    assert [f.name for f in files] == ["10.json", "20.json"]
-    assert not (tmp_path / "top_actions.json").exists()
-    assert sizes["top_actions"] == sum(f.stat().st_size for f in files)
-    top = pd.concat([pd.DataFrame(json.loads(f.read_text())) for f in files], ignore_index=True)
-    assert (pd.DataFrame(json.loads(files[0].read_text())).team_id == 10).all()
-    assert top.groupby(["game_id", "team_id", "kind"]).size().max() <= a.TOP_N
-    assert {"player_name", "team_name", "opponent_name", "minute", "game_date"} <= set(top.columns)
-    assert (top.loc[top.team_name == "Leicester City", "opponent_name"] == "Arsenal").all()
-    assert top.game_date.str.match(r"\d{4}-\d{2}-\d{2}$").all()
+    # every action of the season, one compact file per player
+    files = sorted((tmp_path / "player_actions").glob("*.json"))
+    assert [f.name for f in files] == ["100.json", "101.json", "102.json", "200.json", "201.json", "202.json"]
+    assert sizes["player_actions"] == sum(f.stat().st_size for f in files)
+    vardy = json.loads((tmp_path / "player_actions" / "100.json").read_text())
+    n = (rated.player_id == 100).sum()
+    assert {k: len(vardy[k]) for k in ("g", "m", "t", "r", "x0", "y0", "x1", "y1", "v")} == dict.fromkeys(
+        ("g", "m", "t", "r", "x0", "y0", "x1", "y1", "v"), n)
+    assert sorted({vardy["types"][t] for t in vardy["t"]}) == sorted(rated[rated.player_id == 100].type_name.unique())
+    assert {1, 46} <= set(vardy["m"])  # football minutes: kick-off 1', second half 46'
+    assert sum(vardy["v"]) == pytest.approx(rated[rated.player_id == 100].vaep_value.sum(), abs=0.01)
+
+    played = json.loads((tmp_path / "games.json").read_text())
+    assert len(played) == 4
+    assert played[0] == {"game_id": 1, "game_date": "2015-08-08",
+                         "home_team": "Leicester City", "away_team": "Arsenal",
+                         "home_score": 2, "away_score": 1}  # scores let the page build the league table
 
     zones = json.loads((tmp_path / "zones.json").read_text())
     assert len(zones) <= 2 * 9
@@ -155,19 +161,6 @@ def test_rating_is_reproducible(season):
     first = rate_out_of_fold(games, actions).vaep_value
     second = rate_out_of_fold(games, actions).vaep_value
     pd.testing.assert_series_equal(first, second)
-
-
-def test_top_actions_minute_is_football_minute():
-    """Kick-off is 1', second-half kick-off is 46'."""
-    from soccerhub.pipelines.action_score import top_actions
-
-    rated = pd.DataFrame({
-        "game_id": 1, "team_id": 10, "player_id": 100, "period_id": [1, 2],
-        "time_seconds": [0.0, 0.0], "type_name": "pass", "result_name": "success",
-        "start_x": 1.0, "start_y": 1.0, "end_x": 2.0, "end_y": 2.0, "vaep_value": [0.1, 0.2],
-    })
-    out = top_actions(rated, n=1)
-    assert sorted(out.minute) == [1, 46]
 
 
 def test_force_rerates_without_refetching_games(season, monkeypatch):
@@ -191,3 +184,39 @@ def test_force_rerates_without_refetching_games(season, monkeypatch):
     a.build_action_score(force=True)
     assert fetch_force == [False, False]
     assert len(rated) == 2
+
+
+def test_each_league_exports_to_its_own_folder():
+    """4 leagues must never overwrite each other's site files."""
+    from soccerhub.pipelines.action_score import LEAGUES_2015, site_dir
+
+    dirs = {site_dir(lg) for lg in LEAGUES_2015}
+    assert len(dirs) == 4
+    assert site_dir("ESP-La Liga").name == "esp-la-liga-2015"
+
+
+def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypatch):
+    """Upload keeps the league folder in the object path and overwrites on re-run."""
+    from soccerhub.pipelines import action_score as a
+
+    league = tmp_path / "eng-premier-league-2015"
+    (league / "player_actions").mkdir(parents=True)
+    for pid in (100, 200):
+        (league / "player_actions" / f"{pid}.json").write_text("{}")
+    sent = []
+
+    class Bucket:
+        def upload(self, path, file, file_options):
+            sent.append((path, file_options["upsert"], file_options["content-type"]))
+
+    class Storage:
+        def from_(self, name):
+            assert name == "action-score"
+            return Bucket()
+
+    monkeypatch.setattr(a, "_storage", lambda: Storage())
+    assert a.upload_player_actions(league) == 2
+    assert sorted(sent) == [
+        ("eng-premier-league-2015/player_actions/100.json", "true", "application/json"),
+        ("eng-premier-league-2015/player_actions/200.json", "true", "application/json"),
+    ]

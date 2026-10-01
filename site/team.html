@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Team Analysis — SportSignal</title>
-<meta name="description" content="How a team plays, from the value of every on-ball action: where it creates value, its best and worst moments, and who carries the ball.">
+<meta name="description" content="How a team plays, from the value of every on-ball action: where it creates value, every action of any player across the season, and who carries the ball.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 <link rel="stylesheet" href="theme.css">
 <style>
@@ -12,7 +12,7 @@
   .disp{font-family:"Avenir Next Condensed","Arial Narrow","Helvetica Neue Condensed",Impact,sans-serif;
         text-transform:uppercase;letter-spacing:.04em;font-stretch:condensed}
   .top h1{margin:0;font-size:1.05rem;color:var(--soft);font-weight:400}
-  main{max-width:1060px;margin:0 auto;padding:24px 20px 80px}
+  main{margin:0 auto;padding:24px 20px 80px}  /* full screen width: two pitches side by side */
   .lede{margin:0 0 12px;color:var(--soft);font-size:.9rem}
   .chips{margin:0 0 10px}
 
@@ -28,11 +28,18 @@
   svg text{font:11px system-ui;fill:var(--axis)}
   .empty{padding:50px 16px}
 
-  #matchsel{padding:6px 12px;border-radius:999px;border:1px solid var(--border);
-       background:var(--grass);color:var(--line);font:inherit;font-size:.85rem}
-  .duo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
-  @media(max-width:760px){.duo{grid-template-columns:1fr}}
-  .duo h3{margin:0 0 4px;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase}
+  /* the two charts side by side; stacked again once each would get too narrow */
+  .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+  @media(max-width:1100px){.pair{grid-template-columns:1fr}}
+  .actgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start}
+  @media(max-width:900px){.actgrid{grid-template-columns:1fr}}
+  .squad{max-height:400px;overflow-y:auto}
+  table.squad td:nth-child(2),table.squad th:nth-child(2){text-align:right}
+  table.squad tbody tr{cursor:pointer}
+  table.standings td:nth-child(2),table.standings th:nth-child(2){text-align:left}
+  #lgsel{padding:8px 14px;border-radius:999px;border:1px solid var(--rule);background:var(--field);
+       color:var(--ink);font:inherit;font-size:.9rem;margin:0 0 4px}
+  table.squad tbody tr[aria-selected="true"]{background:rgba(255,180,58,.16)}
 
   .scroll{overflow-x:auto}
   table.log{border-collapse:collapse;width:100%;font-size:.85rem}
@@ -57,43 +64,62 @@
 </nav>
 
 <main>
-  <p class="lede">Action Score · Premier League 2015/16 · every on-ball action valued by how much it
-     changed the team's chance of scoring minus its chance of conceding (VAEP, StatsBomb open data).</p>
-  <div class="chips" id="teamchips"></div>
+  <p class="lede">Action Score · <span id="lgname">2015/16</span> · every on-ball action valued by how much it
+     changed the team's chance of scoring minus its chance of conceding (VAEP, StatsBomb open data).
+     Each league has its own model, so compare teams within a league, not across.</p>
+  <select id="lgsel" aria-label="Choose a league"></select>
+
+  <div class="pair">
 
   <div class="box">
     <h2>Where they create value <span class="plain" id="zonemeta"></span></h2>
-    <div class="chartbox" id="zones"><div class="empty">Loading…</div></div>
+    <div class="actgrid">
+      <div class="chartbox" id="zones"><div class="empty">Loading…</div></div>
+      <div class="squad" id="table"></div>
+    </div>
     <p class="cap">Sum of the value of every action the team started in each ninth of the pitch,
-       attacking left to right. Green adds goal threat, red gives it away. Totals mix how often
+       attacking left to right. Green adds goal threat, red gives it away. League table: click a team
+       to switch; built from the season's results (points, then goal difference, then goals scored),
+       Value = the team's season total. Totals mix how often
        (volume) with how good each touch is (quality); per-action value and the league comparison
        are not shown yet.</p>
   </div>
 
   <div class="box">
-    <h2>Moments <span class="plain"><select id="matchsel" aria-label="Choose a match"></select></span></h2>
-    <div class="chartbox" id="moments"><div class="empty">Loading…</div></div>
-    <div class="duo" id="momentlists"></div>
-    <p class="cap"><span class="swatch" style="background:var(--amber)"></span> the 10 actions that
-       raised the team's goal odds most in this match ·
-       <span class="swatch" style="background:var(--red)"></span> the 10 that cost most.
-       Arrows run from where the action started to where it ended, team attacking left to right.</p>
+    <h2>Every action, one player <span class="plain" id="actmeta"></span></h2>
+    <div class="actgrid">
+      <div class="chartbox" id="actmap"><div class="empty">Loading…</div></div>
+      <div class="squad" id="squad"></div>
+    </div>
+    <p class="cap">Every on-ball action the player made all season that moved his team's goal odds by
+       at least ±0.025, team attacking left to right, each line running from where the action
+       started to where it ended. Colour = kind of action:
+       <span class="swatch" style="background:var(--green)"></span> shooting ·
+       <span class="swatch" style="background:var(--blue)"></span> passing ·
+       <span class="swatch" style="background:var(--chalk-y)"></span> carrying ·
+       <span class="swatch" style="background:var(--red)"></span> defending ·
+       <span class="swatch" style="background:var(--muted)"></span> goalkeeping.
+       Line thickness runs from his most costly action (thinnest) to his most valuable (thickest).
+       Squad list: click a player to draw his season. Value = sum over all his actions; per 90
+       below 900 minutes is greyed out because it swings on a few games. On-ball only: runs and
+       positioning are invisible, and defenders are undervalued.</p>
   </div>
 
-  <div class="box">
-    <h2>Who carries the ball <span class="plain" id="playermeta"></span></h2>
-    <div class="scroll" id="players"><div class="empty">Loading…</div></div>
-    <p class="cap">Tiers are league-wide thirds of value per 90 among players with at least 900
-       minutes. Rating the same players on alternate halves of the season agrees only weakly
-       (Spearman 0.31), so players inside a tier are interchangeable — read the tier, not the
-       order. On-ball only: runs and positioning are invisible and defenders are undervalued.</p>
   </div>
 </main>
 <div id="tip" role="status"></div>
 
 <script>
 const DATA = "data/action_score/";
-const DEFAULT_TEAM = 22;          // Leicester City — the season's story
+// one folder per league-season, written by soccerhub.pipelines.action_score.site_dir
+const LEAGUES = [["eng-premier-league-2015", "Premier League"], ["esp-la-liga-2015", "La Liga"],
+                 ["ita-serie-a-2015", "Serie A"], ["fra-ligue-1-2015", "Ligue 1"]];
+// every-action files are ~22 MB a league, so they stay out of git: local copy on localhost,
+// public Supabase Storage bucket on the live site (uploaded by soccerhub upload_player_actions)
+const SUPABASE_URL = "https://rgnzemkdldohplwbxxwy.supabase.co";
+const ACTIONS_BASE = ["localhost", "127.0.0.1"].includes(location.hostname)
+  ? DATA : `${SUPABASE_URL}/storage/v1/object/public/action-score/`;  // Leicester City — the season's story
+let league = LEAGUES[0][0];
 const MIN_MINUTES_RANK = 900;     // same floor as the pipeline's ranking views
 // pitch in SPADL metres, drawn horizontally; team attacks left -> right.
 // SPADL y=0 is the attacking team's RIGHT flank, so it sits at the bottom.
@@ -109,12 +135,13 @@ const tipEl = () => document.getElementById("tip");
 const showTip = (e, html) => { const t=tipEl(); t.innerHTML=html; t.style.display="block";
   t.style.left=Math.min(e.clientX+14, innerWidth-200)+"px"; t.style.top=(e.clientY+14)+"px"; };
 const hideTip = () => tipEl().style.display="none";
-const getJSON = async path => { const r = await fetch(DATA + path);
+// re-exports overwrite files in place: revalidate every load (cheap 304 if unchanged), never serve a stale copy
+const getJSON = async path => { const r = await fetch(`${DATA}${league}/${path}`, {cache: "no-cache"});
   if(!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const f1 = v => (v >= 0 ? "+" : "") + v.toFixed(1);
 const f3 = v => (v >= 0 ? "+" : "") + v.toFixed(3);
 
-let PLAYERS = [], ZONES = [], TIERS = null, team = null, moments = [];
+let PLAYERS = [], ZONES = [], GAMES = {}, team = null, pid = null, acts = null;
 
 function pitchLines(){
   const L = (x1,y1,x2,y2) => `<line x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}"/>`;
@@ -126,16 +153,6 @@ function pitchLines(){
     ${L(PW/2, 0, PW/2, PH)}<circle cx="${X(PW/2)}" cy="${Y(PH/2)}" r="${9.15*S}"/>
     ${box(16.5, 40.32)}${box(5.5, 18.32)}</g>`;
 }
-
-/* ---------- tiers: league-wide thirds of per-90, among regulars ---------- */
-function tierCuts(){
-  const v = PLAYERS.filter(p => p.minutes >= MIN_MINUTES_RANK && p.vaep_per90 != null)
-                   .map(p => p.vaep_per90).sort((a,b) => a-b);
-  return {lo: v[Math.floor(v.length/3)], hi: v[Math.floor(2*v.length/3)], n: v.length};
-}
-const tierOf = p => p.minutes < MIN_MINUTES_RANK || p.vaep_per90 == null ? null
-  : p.vaep_per90 >= TIERS.hi ? "Top" : p.vaep_per90 >= TIERS.lo ? "Middle" : "Bottom";
-const TIER_COLOR = {Top:"var(--green)", Middle:"var(--chalk-y)", Bottom:"var(--muted)"};
 
 /* ---------- zones ---------- */
 function drawZones(){
@@ -170,109 +187,172 @@ function drawZones(){
   svg.addEventListener("mouseleave", hideTip);
 }
 
-/* ---------- moments ---------- */
-async function loadMoments(){
-  document.getElementById("moments").innerHTML = `<div class="empty">Loading…</div>`;
-  document.getElementById("momentlists").innerHTML = "";
-  try { moments = await getJSON(`top_actions/${team}.json`); }
-  catch { moments = []; }
-  const games = [...new Map(moments.map(r => [r.game_id, r])).values()]
-    .sort((a,b) => a.game_date.localeCompare(b.game_date));
-  const sel = document.getElementById("matchsel");
-  sel.innerHTML = games.map(g => `<option value="${g.game_id}">${esc(g.game_date)} · vs ${esc(g.opponent_name)}</option>`).join("");
-  sel.onchange = () => drawMoments(+sel.value);
-  if(!games.length){
-    document.getElementById("moments").innerHTML = `<div class="empty">No match data for this team.</div>`;
-    return;
-  }
-  drawMoments(games[0].game_id);
+/* ---------- one player, every action of the season ---------- */
+function drawSquad(){
+  const squad = PLAYERS.filter(p => p.team_id === team && p.n_actions > 0)
+    .sort((a,b) => b.vaep_total - a.vaep_total);
+  document.getElementById("squad").innerHTML = `<table class="log nums squad">
+    <thead><tr><th>Player</th><th>Min</th><th>Value</th><th>Per 90</th></tr></thead>
+    <tbody>${squad.map(p => `<tr data-pid="${p.player_id}" tabindex="0" aria-selected="${p.player_id === pid}">
+      <td>${esc(p.player_name)}</td><td>${p.minutes.toLocaleString()}</td><td>${f1(p.vaep_total)}</td>
+      <td${p.minutes < MIN_MINUTES_RANK ? ' class="dim"' : ""}>${p.vaep_per90 == null ? "—" : p.vaep_per90.toFixed(2)}</td></tr>`).join("")}
+    </tbody></table>`;
 }
 
-function drawMoments(gameId){
-  const rows = moments.filter(r => r.game_id === gameId);
-  const best = rows.filter(r => r.kind === "best").sort((a,b) => b.vaep_value - a.vaep_value);
-  const worst = rows.filter(r => r.kind === "worst").sort((a,b) => a.vaep_value - b.vaep_value);
-  const shown = [...best, ...worst];
-  const arrows = shown.map((r, i) => {
-    const c = r.kind === "best" ? "var(--amber)" : "var(--red)";
-    return `<g data-i="${i}" stroke="${c}" fill="${c}">
-      <line x1="${X(r.start_x)}" y1="${Y(r.start_y)}" x2="${X(r.end_x)}" y2="${Y(r.end_y)}"
-        stroke-width="2.2" marker-end="url(#head-${r.kind})"/>
-      <circle cx="${X(r.start_x)}" cy="${Y(r.start_y)}" r="4.5" stroke="#10221a" stroke-width="1"/></g>`;
-  }).join("");
-  const head = (id, c) => `<marker id="head-${id}" viewBox="0 0 10 10" refX="8" refY="5"
-    markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`;
-  document.getElementById("moments").innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="momentsvg"
-    aria-label="Best and worst actions of the match"><defs>${head("best","var(--amber)")}${head("worst","var(--red)")}</defs>
-    ${pitchLines()}${arrows}<text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
+function pickPlayer(id){
+  pid = id;
+  document.querySelectorAll("#squad tr[data-pid]").forEach(r => r.setAttribute("aria-selected", +r.dataset.pid === id));
+  loadPlayer(id);
+}
 
-  const list = (title, rs, c) => `<div><h3 style="color:${c}">${title}</h3>
-    <table class="log nums"><tbody>${rs.map(r => `<tr><td>${r.minute}'</td>
-      <td>${esc(r.player_name ?? "?")} <span class="dim">${esc(r.type_name.replace(/_/g, " "))}${r.result_name === "success" ? "" : " · " + esc(r.result_name)}</span></td>
-      <td>${f3(r.vaep_value)}</td></tr>`).join("")}</tbody></table></div>`;
-  document.getElementById("momentlists").innerHTML =
-    list("Raised goal odds most", best, "var(--amber)") + list("Cost the most", worst, "var(--red)");
+const squadEl = document.getElementById("squad");
+squadEl.addEventListener("click", e => { const r = e.target.closest("tr[data-pid]"); if(r) pickPlayer(+r.dataset.pid); });
+squadEl.addEventListener("keydown", e => {
+  const r = e.target.closest("tr[data-pid]");
+  if(r && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); pickPlayer(+r.dataset.pid); }
+});
 
-  const svg = document.getElementById("momentsvg");
+async function loadPlayer(pid){
+  document.getElementById("actmap").innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const r = await fetch(`${ACTIONS_BASE}${league}/player_actions/${pid}.json`, {cache: "no-cache"});
+    if(!r.ok) throw new Error(r.status);
+    const f = await r.json();
+    // columns -> rows; the file stores plain numbers to stay small
+    acts = f.g.map((g, i) => ({g, m: f.m[i], type: f.types[f.t[i]], ok: f.r[i] === 1,
+      x0: f.x0[i], y0: f.y0[i], x1: f.x1[i], y1: f.y1[i], v: f.v[i]}));
+  } catch(err) {
+    acts = null;
+    document.getElementById("actmap").innerHTML = `<div class="empty">No action file for this player (${esc(err.message)}).</div>`;
+    return;
+  }
+  drawActions(pid);
+}
+
+// colour = kind of action; series colours are the ones theme.css measured against the dark panel
+const GROUPS = [
+  ["shooting", "var(--green)", ["shot", "shot_freekick", "shot_penalty"]],
+  ["passing", "var(--blue)", ["pass", "cross", "throw_in", "freekick_crossed", "freekick_short",
+                               "corner_crossed", "corner_short", "goalkick"]],
+  ["carrying", "var(--chalk-y)", ["dribble", "take_on", "bad_touch"]],
+  ["defending", "var(--red)", ["tackle", "interception", "clearance", "foul"]],
+];
+const colourOf = t => (GROUPS.find(g => g[2].includes(t)) ?? [, "var(--muted)"])[1];  // keeper + rest: grey
+const HEADS = [...GROUPS.map(g => g[1]), "var(--muted)"];
+const MIN_ABS = 0.025;   // below this an action barely moves goal odds: left off the chart
+const drawn = () => acts.filter(a => Math.abs(a.v) >= MIN_ABS);
+
+const opponentOf = g => { const x = GAMES[g], mine = PLAYERS.find(p => p.team_id === team).team_name;
+  return x ? (x.home_team === mine ? x.away_team : x.home_team) : "?"; };
+
+function drawActions(pid){
+  const p = PLAYERS.find(q => q.player_id === pid && q.team_id === team);
+  const shown = drawn();
+  const lo = Math.min(...shown.map(a => a.v)), hi = Math.max(...shown.map(a => a.v));
+  // line and head both follow signed value, from his most costly action to his most valuable:
+  //   line 0.5 px -> 3 px; head = the head of a 1 px line -> a 3 px line (5 units per px of line)
+  const t = v => (v - lo) / Math.max(hi - lo, 1e-9);
+  const width = v => (0.5 + 2.5 * t(v)).toFixed(2);
+  const headStep = v => Math.round((1 + 2 * t(v)) * 4);  // head size in quarter-px steps: 4..12
+  // thin first, thick last, so the most valuable actions sit on top
+  const lines = shown.map((a, i) => [a, i]).sort((x, y) => x[0].v - y[0].v)
+    .map(([a, i]) => `<line data-i="${i}" x1="${X(a.x0)}" y1="${Y(a.y0)}" x2="${X(a.x1)}" y2="${Y(a.y1)}"
+      stroke="${colourOf(a.type)}" stroke-width="${width(a.v)}" stroke-linecap="round" stroke-opacity=".85"
+      marker-end="url(#h-${HEADS.indexOf(colourOf(a.type))}-${headStep(a.v)})"/>`).join("");
+  // fixed-size heads (userSpaceOnUse) so head size follows value, not line width: 5 colours x 9 sizes
+  const heads = HEADS.flatMap((c, k) => [4, 5, 6, 7, 8, 9, 10, 11, 12].map(q =>
+    `<marker id="h-${k}-${q}" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse"
+      markerWidth="${5 * q / 4}" markerHeight="${5 * q / 4}" orient="auto"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`)).join("");
+  document.getElementById("actmap").innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="actsvg"
+    aria-label="Every action of the selected player this season, coloured by kind"><defs>${heads}</defs>
+    ${pitchLines()}${lines}<text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
+
+  const total = shown.reduce((s, a) => s + a.v, 0);
+  const hidden = acts.length - drawn().length;
+  document.getElementById("actmeta").textContent = `· ${p?.player_name ?? ""} · ${shown.length.toLocaleString()} actions drawn` +
+    ` (${hidden.toLocaleString()} under ±${MIN_ABS} left off) · value ${f1(total)}` +
+    (p && p.minutes ? ` · ${(total / p.minutes * 90).toFixed(2)} per 90` : "");
+
+  const svg = document.getElementById("actsvg");
   svg.addEventListener("mousemove", e => {
-    const g = e.target.closest("g[data-i]");
-    if(!g){ hideTip(); return; }
-    const r = shown[+g.dataset.i];
-    showTip(e, `<div class="t">${r.minute}' · ${esc(r.player_name ?? "?")}</div>
-      ${esc(r.type_name.replace(/_/g, " "))} · ${esc(r.result_name)}<br>value ${f3(r.vaep_value)}`);
+    const l = e.target.closest("line[data-i]");
+    if(!l){ hideTip(); return; }
+    const a = shown[+l.dataset.i];
+    showTip(e, `<div class="t">${esc(GAMES[a.g]?.game_date ?? "")} · vs ${esc(opponentOf(a.g))} · ${a.m}'</div>
+      ${esc(a.type.replace(/_/g, " "))}${a.ok ? "" : " · failed"}<br>value ${f3(a.v)}`);
   });
   svg.addEventListener("mouseleave", hideTip);
 }
 
-/* ---------- players ---------- */
-function drawPlayers(){
-  const rows = PLAYERS.filter(p => p.team_id === team && p.minutes > 0)
-    .map(p => ({...p, tier: tierOf(p)}))
-    .sort((a,b) => (!!b.tier - !!a.tier) || (b.tier ? b.vaep_per90 - a.vaep_per90 : b.minutes - a.minutes));
-  const regulars = rows.filter(p => p.tier).length;
-  document.getElementById("playermeta").textContent =
-    `· ${regulars} with ${MIN_MINUTES_RANK}+ minutes, tiers cut across all ${TIERS.n} such players in the league`;
-  document.getElementById("players").innerHTML = `<table class="log nums">
-    <thead><tr><th>Player</th><th>Tier</th><th>Minutes</th><th>Actions</th><th>Value</th><th>Per 90</th></tr></thead>
-    <tbody>${rows.map(p => `<tr${p.tier ? "" : ' class="dim"'}>
-      <td>${esc(p.player_name)}</td>
-      <td>${p.tier ? `<span class="swatch" style="background:${TIER_COLOR[p.tier]}"></span> ${p.tier}`
-                   : `under ${MIN_MINUTES_RANK}'`}</td>
-      <td>${p.minutes.toLocaleString()}</td><td>${Math.round(p.n_actions).toLocaleString()}</td>
-      <td>${f1(p.vaep_total)}</td><td>${p.vaep_per90 == null ? "—" : p.vaep_per90.toFixed(2)}</td></tr>`).join("")}
-    </tbody></table>`;
+/* ---------- team picker + state ---------- */
+function standings(){
+  const t = {};
+  const row = name => t[name] ??= {name, pts: 0, gf: 0, ga: 0};
+  Object.values(GAMES).forEach(g => {
+    const h = row(g.home_team), a = row(g.away_team);
+    h.gf += g.home_score; h.ga += g.away_score; a.gf += g.away_score; a.ga += g.home_score;
+    if(g.home_score > g.away_score) h.pts += 3; else if(g.home_score < g.away_score) a.pts += 3;
+    else { h.pts++; a.pts++; }
+  });
+  const idOf = Object.fromEntries(PLAYERS.map(p => [p.team_name, p.team_id]));
+  const value = {};
+  ZONES.forEach(z => value[z.team_id] = (value[z.team_id] || 0) + z.vaep_total);
+  // ponytail: points > GD > goals; real tiebreaks differ by league (La Liga/Serie A use head-to-head)
+  return Object.values(t).map(r => ({...r, id: idOf[r.name], gd: r.gf - r.ga, value: value[idOf[r.name]] ?? 0}))
+    .sort((a,b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
 }
 
-/* ---------- team picker + state ---------- */
-function drawChips(){
-  const teams = [...new Map(PLAYERS.map(p => [p.team_id, p.team_name])).entries()]
-    .sort((a,b) => a[1].localeCompare(b[1]));
-  document.getElementById("teamchips").innerHTML = teams.map(([id, name]) =>
-    `<button data-t="${id}" aria-pressed="${id === team}">${esc(name)}</button>`).join("");
+function drawTable(){
+  document.getElementById("table").innerHTML = `<table class="log nums squad standings">
+    <thead><tr><th>#</th><th>Team</th><th>Pts</th><th>GD</th><th>Value</th></tr></thead>
+    <tbody>${standings().map((r, i) => `<tr data-t="${r.id}" tabindex="0" aria-selected="${r.id === team}">
+      <td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.pts}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td>
+      <td>${f1(r.value)}</td></tr>`).join("")}</tbody></table>`;
 }
 
 function selectTeam(id){
   team = id;
-  history.replaceState(null, "", `?team=${id}`);
-  drawChips(); drawZones(); drawPlayers(); loadMoments();
+  history.replaceState(null, "", `?lg=${league}&team=${id}`);
+  drawTable(); drawZones();
+  // open on whoever added the most value (top of the list)
+  const top = PLAYERS.filter(p => p.team_id === id && p.n_actions > 0).sort((a,b) => b.vaep_total - a.vaep_total)[0];
+  pid = top?.player_id ?? null;
+  drawSquad();
+  if(top) loadPlayer(pid);
 }
 
-document.getElementById("teamchips").addEventListener("click", e => {
-  const b = e.target.closest("button[data-t]");
-  if(b) selectTeam(+b.dataset.t);
-});
+function drawLeagueSelect(){
+  const sel = document.getElementById("lgsel");
+  sel.innerHTML = LEAGUES.map(([slug, name]) => `<option value="${slug}">${name} 2015/16</option>`).join("");
+  sel.value = league;
+  document.getElementById("lgname").textContent = `${LEAGUES.find(l => l[0] === league)[1]} 2015/16`;
+}
 
-(async () => {
+async function loadLeague(slug, askedTeam){
+  league = slug;
+  drawLeagueSelect();
   try {
-    [PLAYERS, ZONES] = await Promise.all([getJSON("players.json"), getJSON("zones.json")]);
+    let games;
+    [PLAYERS, ZONES, games] = await Promise.all([getJSON("players.json"), getJSON("zones.json"), getJSON("games.json")]);
+    GAMES = Object.fromEntries(games.map(g => [g.game_id, g]));
   } catch(err) {
     document.querySelectorAll(".empty").forEach(el => el.textContent = `Could not load data (${err.message}).`);
     return;
   }
-  TIERS = tierCuts();
-  const asked = +new URLSearchParams(location.search).get("team");
-  selectTeam(PLAYERS.some(p => p.team_id === asked) ? asked : DEFAULT_TEAM);
-})();
+  // open on the champions unless the URL asks for a team
+  selectTeam(PLAYERS.some(p => p.team_id === askedTeam) ? askedTeam : standings()[0].id);
+}
+
+const tableEl = document.getElementById("table");
+tableEl.addEventListener("click", e => { const r = e.target.closest("tr[data-t]"); if(r) selectTeam(+r.dataset.t); });
+tableEl.addEventListener("keydown", e => {
+  const r = e.target.closest("tr[data-t]");
+  if(r && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); selectTeam(+r.dataset.t); }
+});
+document.getElementById("lgsel").addEventListener("change", e => loadLeague(e.target.value));
+
+const q = new URLSearchParams(location.search);
+loadLeague(LEAGUES.some(l => l[0] === q.get("lg")) ? q.get("lg") : LEAGUES[0][0], +q.get("team"));
 </script>
 </body>
 </html>

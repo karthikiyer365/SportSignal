@@ -165,3 +165,18 @@ counter-attacking, inflates their players).
 
 Verdict: model trustworthy; player ranking usable as tiers (top/middle/bottom), not as exact ranks.
 The site must show it that way. `top_actions.json` is 5.2 MB (> 2 MB): split per team in plan 2.
+
+## v1.1 — four leagues (2026-10-01)
+
+Same pipeline, one model per league (styles differ; compare within a league only).
+
+| League 2015/16 | AUC | Team Spearman | Reliability (n) |
+|---|---|---|---|
+| Premier League | 0.795 | 0.768 | 0.313 (293) |
+| La Liga | 0.806 | 0.587 | 0.253 (298) |
+| Serie A | 0.790 | 0.792 | 0.359 (292) |
+| Ligue 1 | 0.791 | 0.452 | 0.266 (300) |
+
+Ligue 1's low team Spearman: PSG top (93 pts) and Troyes near bottom (18) as expected, but the middle
+is bunched (Lille 60 pts sits 14th on VAEP). Site export changed: per-match top actions replaced by
+every action per player (`player_actions/`, ~25 MB/league, git-ignored, live copy in Supabase Storage).
