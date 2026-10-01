@@ -7,6 +7,7 @@ from soccerhub.readers.clubelo import fetch_club_elo_history, fetch_club_elo_sna
 from soccerhub.readers.fbref import fetch_fbref_season
 from soccerhub.readers.matchhistory import fetch_match_history
 from soccerhub.readers.statsbomb import fetch_statsbomb_events
+from soccerhub.readers.statsbomb_spadl import fetch_statsbomb_spadl
 from soccerhub.readers.transfermarkt import (
     fetch_transfermarkt_players,
     fetch_transfermarkt_transfers,
@@ -29,6 +30,7 @@ from soccerhub.pipelines import (
     read_hub,
     run_season,
 )
+from soccerhub.pipelines.action_score import build_action_score, export_action_score_site
 
 __all__ = [
     "ask",
@@ -39,6 +41,7 @@ __all__ = [
     "fetch_fbref_season",
     "fetch_match_history",
     "fetch_statsbomb_events",
+    "fetch_statsbomb_spadl",
     "fetch_transfermarkt_players",
     "fetch_transfermarkt_transfers",
     "fetch_transfermarkt_values",
@@ -57,4 +60,6 @@ __all__ = [
     "fetch_understat",
     "read_hub",
     "run_season",
+    "build_action_score",
+    "export_action_score_site",
 ]
