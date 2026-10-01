@@ -180,3 +180,21 @@ Same pipeline, one model per league (styles differ; compare within a league only
 Ligue 1's low team Spearman: PSG top (93 pts) and Troyes near bottom (18) as expected, but the middle
 is bunched (Lille 60 pts sits 14th on VAEP). Site export changed: per-match top actions replaced by
 every action per player (`player_actions/`, ~25 MB/league, git-ignored, live copy in Supabase Storage).
+
+## v1.2 — Wyscout 2017/18, all five leagues (2026-10-01)
+
+Wyscout public dataset (Pappalardo et al. 2019, CC BY 4.0), own model per league-season. Same-match
+check on World Cup 2018 (64 games in both providers): passes r=1.00, shots 0.98, goals 1.00, but
+Wyscout logs ~37% fewer actions (almost no carries), so its values are never compared with StatsBomb's.
+
+| League 2017/18 | AUC | Team Spearman | Reliability (n) |
+|---|---|---|---|
+| Premier League | 0.753 | 0.864 | 0.429 (319) |
+| La Liga | 0.747 | 0.778 | 0.392 (306) |
+| Serie A | 0.753 | 0.864 | 0.411 (306) |
+| Ligue 1 | 0.752 | 0.818 | 0.353 (298) |
+| Bundesliga | 0.753 | 0.806 | 0.338 (244) |
+
+Lower AUC than StatsBomb (fewer, coarser events), but team and player-ranking checks are stronger.
+Wyscout quirks handled in the reader: scores read from raw matches files; team names stored as
+literal "ü" escapes are decoded; player_id 0 (unattributed actions) counts for the team only.

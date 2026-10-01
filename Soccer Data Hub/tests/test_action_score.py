@@ -186,13 +186,14 @@ def test_force_rerates_without_refetching_games(season, monkeypatch):
     assert len(rated) == 2
 
 
-def test_each_league_exports_to_its_own_folder():
-    """4 leagues must never overwrite each other's site files."""
-    from soccerhub.pipelines.action_score import LEAGUES_2015, site_dir
+def test_each_league_season_exports_to_its_own_folder():
+    """9 league-seasons (4 StatsBomb 2015/16 + 5 Wyscout 2017/18) never overwrite each other."""
+    from soccerhub.pipelines.action_score import LEAGUE_SEASONS, site_dir
 
-    dirs = {site_dir(lg) for lg in LEAGUES_2015}
-    assert len(dirs) == 4
-    assert site_dir("ESP-La Liga").name == "esp-la-liga-2015"
+    dirs = {site_dir(league, season) for league, season in LEAGUE_SEASONS}
+    assert len(dirs) == 9
+    assert site_dir("GER-Bundesliga", "2017").name == "ger-bundesliga-2017"
+    assert {p for p, _, _ in LEAGUE_SEASONS.values()} == {"statsbomb", "wyscout"}
 
 
 def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypatch):
@@ -220,3 +221,16 @@ def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypat
         ("eng-premier-league-2015/player_actions/100.json", "true", "application/json"),
         ("eng-premier-league-2015/player_actions/200.json", "true", "application/json"),
     ]
+
+
+def test_unknown_player_placeholder_is_not_a_player(season):
+    """Wyscout files unattributed actions under player_id 0: they count for the team, not as a player."""
+    from soccerhub.pipelines.action_score import add_zone, player_table, rate_out_of_fold
+
+    games, actions, players = season
+    actions = actions.copy()
+    actions.loc[actions.index[:5], "player_id"] = 0
+    players = pd.concat([players, pd.DataFrame([{"game_id": 1, "team_id": 10, "team_name": "Leicester City",
+                                                 "player_id": 0, "player_name": None, "minutes_played": 7}])])
+    rated = add_zone(rate_out_of_fold(games, actions), games)
+    assert 0 not in set(player_table(rated, players).player_id)

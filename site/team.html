@@ -64,9 +64,10 @@
 </nav>
 
 <main>
-  <p class="lede">Action Score · <span id="lgname">2015/16</span> · every on-ball action valued by how much it
-     changed the team's chance of scoring minus its chance of conceding (VAEP, StatsBomb open data).
-     Each league has its own model, so compare teams within a league, not across.</p>
+  <p class="lede">Action Score · <span id="lgname"></span> · every on-ball action valued by how much it
+     changed the team's chance of scoring minus its chance of conceding (VAEP, <span id="source"></span>).
+     Each league-season has its own model, so compare teams within one, not across.
+     <span id="provnote"></span></p>
   <select id="lgsel" aria-label="Choose a league"></select>
 
   <div class="pair">
@@ -112,8 +113,25 @@
 <script>
 const DATA = "data/action_score/";
 // one folder per league-season, written by soccerhub.pipelines.action_score.site_dir
-const LEAGUES = [["eng-premier-league-2015", "Premier League"], ["esp-la-liga-2015", "La Liga"],
-                 ["ita-serie-a-2015", "Serie A"], ["fra-ligue-1-2015", "Ligue 1"]];
+// [folder, league, season, provider] — folders written by soccerhub.pipelines.action_score.site_dir
+const LEAGUES = [
+  ["eng-premier-league-2015", "Premier League", "2015/16", "statsbomb"],
+  ["esp-la-liga-2015", "La Liga", "2015/16", "statsbomb"],
+  ["ita-serie-a-2015", "Serie A", "2015/16", "statsbomb"],
+  ["fra-ligue-1-2015", "Ligue 1", "2015/16", "statsbomb"],
+  ["eng-premier-league-2017", "Premier League", "2017/18", "wyscout"],
+  ["esp-la-liga-2017", "La Liga", "2017/18", "wyscout"],
+  ["ita-serie-a-2017", "Serie A", "2017/18", "wyscout"],
+  ["ger-bundesliga-2017", "Bundesliga", "2017/18", "wyscout"],
+  ["fra-ligue-1-2017", "Ligue 1", "2017/18", "wyscout"],
+];
+const PROVIDERS = {
+  statsbomb: {label: "StatsBomb · 2015/16", source: 'StatsBomb open data'},
+  // CC BY 4.0 requires this credit
+  wyscout: {label: "Wyscout · 2017/18",
+    source: 'Wyscout public dataset, <a href="https://doi.org/10.1038/s41597-019-0247-7">Pappalardo et al. 2019</a>, CC BY 4.0',
+    note: "Wyscout logs almost no ball carries and counts tackles differently, so 2017/18 maps show far fewer yellow lines and are not comparable with 2015/16."},
+};
 // every-action files are ~22 MB a league, so they stay out of git: local copy on localhost,
 // public Supabase Storage bucket on the live site (uploaded by soccerhub upload_player_actions)
 const SUPABASE_URL = "https://rgnzemkdldohplwbxxwy.supabase.co";
@@ -323,9 +341,14 @@ function selectTeam(id){
 
 function drawLeagueSelect(){
   const sel = document.getElementById("lgsel");
-  sel.innerHTML = LEAGUES.map(([slug, name]) => `<option value="${slug}">${name} 2015/16</option>`).join("");
+  sel.innerHTML = Object.entries(PROVIDERS).map(([prov, P]) => `<optgroup label="${P.label}">${
+    LEAGUES.filter(l => l[3] === prov).map(([slug, name, season]) => `<option value="${slug}">${name} ${season}</option>`).join("")
+  }</optgroup>`).join("");
   sel.value = league;
-  document.getElementById("lgname").textContent = `${LEAGUES.find(l => l[0] === league)[1]} 2015/16`;
+  const [, name, season, prov] = LEAGUES.find(l => l[0] === league);
+  document.getElementById("lgname").textContent = `${name} ${season}`;
+  document.getElementById("source").innerHTML = PROVIDERS[prov].source;
+  document.getElementById("provnote").textContent = PROVIDERS[prov].note ?? "";
 }
 
 async function loadLeague(slug, askedTeam){

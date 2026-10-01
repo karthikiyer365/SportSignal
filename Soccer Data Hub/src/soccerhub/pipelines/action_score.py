@@ -14,14 +14,21 @@ import pandas as pd
 from soccerhub.cache import cached_fetch
 from soccerhub.manifest import Manifest
 from soccerhub.readers.statsbomb_spadl import fetch_statsbomb_spadl
+from soccerhub.readers.wyscout_spadl import fetch_wyscout_spadl
 
-# StatsBomb open data's complete 2015/16 leagues (ids verified 2026-10-01).
-# Bundesliga 2015/16 is Leverkusen-only, so it's left out. Each league gets its own model.
-LEAGUES_2015 = {
-    "ENG-Premier League": (2, 27),
-    "ESP-La Liga": (11, 27),
-    "ITA-Serie A": (12, 27),
-    "FRA-Ligue 1": (7, 27),
+# Every complete top-5 league-season in open event data: (league, season start) -> (provider, ids).
+# StatsBomb 2015/16: Bundesliga is Leverkusen-only, so left out. Wyscout 2017/18: all five.
+# One model per league-season; providers log events differently, so never compare across them.
+LEAGUE_SEASONS = {
+    ("ENG-Premier League", "2015"): ("statsbomb", 2, 27),
+    ("ESP-La Liga", "2015"): ("statsbomb", 11, 27),
+    ("ITA-Serie A", "2015"): ("statsbomb", 12, 27),
+    ("FRA-Ligue 1", "2015"): ("statsbomb", 7, 27),
+    ("ENG-Premier League", "2017"): ("wyscout", 364, 181150),
+    ("ESP-La Liga", "2017"): ("wyscout", 795, 181144),
+    ("ITA-Serie A", "2017"): ("wyscout", 524, 181248),
+    ("FRA-Ligue 1", "2017"): ("wyscout", 412, 181189),
+    ("GER-Bundesliga", "2017"): ("wyscout", 426, 181137),
 }
 MIN_MINUTES_RANK = 900  # guess, not derived: revisit after the reliability check
 MIN_MINUTES_HALF = 450  # reliability check: minutes needed in each fold
@@ -103,8 +110,12 @@ def add_zone(actions: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
     return out.assign(start_zone=third.astype(str) + "-" + lane.astype(str))
 
 
+UNKNOWN_PLAYER = 0  # Wyscout files unattributed actions under player_id 0: team value, not a player
+
+
 def player_table(rated: pd.DataFrame, players: pd.DataFrame) -> pd.DataFrame:
     """One row per player per team: what he added on the ball, total and per 90."""
+    rated, players = rated[rated.player_id != UNKNOWN_PLAYER], players[players.player_id != UNKNOWN_PLAYER]
     minutes = players.groupby(["player_id", "team_id"], as_index=False).agg(
         player_name=("player_name", "first"),
         team_name=("team_name", "first"),
@@ -205,7 +216,7 @@ def export_action_score_site(games, players, rated, table, out_dir=SITE_DIR) -> 
         df.round(4).to_json(path, orient="records")
         sizes[name] = path.stat().st_size
     sizes["player_actions"] = 0
-    for pid, df in rated.groupby("player_id"):
+    for pid, df in rated[rated.player_id != UNKNOWN_PLAYER].groupby("player_id"):
         path = out_dir / "player_actions" / f"{int(pid)}.json"
         path.write_text(json.dumps(_player_file(df), separators=(",", ":")))
         sizes["player_actions"] += path.stat().st_size
@@ -234,20 +245,23 @@ def upload_player_actions(league_dir) -> int:
 
 LIABILITIES = """\
 Liabilities (read before quoting any number):
-- Model dependence: one StatsBomb season, one learner (xgboost), 2-fold out-of-fold.
+- Model dependence: one model per league-season, one learner (xgboost), 2-fold out-of-fold.
+- Provider: StatsBomb (2015/16) and Wyscout (2017/18) log events differently; never compare across.
 - Blind spots: undervalues defending; off-ball runs are invisible.
 - Team style inflates players: Leicester's counter-attacking shapes their numbers.
 - Meaning: "what he added on the ball this season", not "how good he is"."""
 
 
 def build_action_score(
-    competition_id: int = 2, season_id: int = 27, force: bool = False, refetch: bool = False
+    competition_id: int = 2, season_id: int = 27, force: bool = False, refetch: bool = False,
+    provider: str = "statsbomb",
 ) -> dict[str, Manifest]:
     """force = re-run the model (minutes); refetch = re-download every game (20-40 min).
 
     The ratings cache key has no code version: after changing the model, folds or zones, pass force=True.
     """
-    src = fetch_statsbomb_spadl(competition_id, season_id, refetch)
+    fetch = fetch_wyscout_spadl if provider == "wyscout" else fetch_statsbomb_spadl
+    src = fetch(competition_id, season_id, refetch)  # provider ids never overlap, so cache keys don't either
     params = {"competition_id": competition_id, "season_id": season_id}
     games = pd.read_parquet(src["games"].path)
     actions_m = cached_fetch(
@@ -257,11 +271,13 @@ def build_action_score(
     return {"games": src["games"], "players": src["players"], "actions_vaep": actions_m}
 
 
-def main(force: bool = False, leagues=None, upload: bool = False):
-    for league in leagues or LEAGUES_2015:
-        print(f"\n===== {league} 2015/16 =====")
-        competition_id, season_id = LEAGUES_2015[league]
-        m = build_action_score(competition_id, season_id, force=force)
+def main(force: bool = False, only=(), upload: bool = False):
+    """Rate and export every league-season, or only those matching `only` (league names or seasons)."""
+    for (league, season), (provider, competition_id, season_id) in LEAGUE_SEASONS.items():
+        if only and league not in only and season not in only:
+            continue
+        print(f"\n===== {league} {season}/{int(season[2:]) + 1} ({provider}) =====")
+        m = build_action_score(competition_id, season_id, force=force, provider=provider)
         games, players = pd.read_parquet(m["games"].path), pd.read_parquet(m["players"].path)
         rated = pd.read_parquet(m["actions_vaep"].path)
         table = player_table(rated, players)  # one groupby: cheap, so never cached and never stale
@@ -275,15 +291,15 @@ def main(force: bool = False, leagues=None, upload: bool = False):
 
         ranked = table[table.minutes >= MIN_MINUTES_RANK].sort_values("vaep_per90", ascending=False)
         print(ranked.head(10).to_string(index=False))
-        print("site export bytes:", export_action_score_site(games, players, rated, table, site_dir(league)))
+        print("site export bytes:", export_action_score_site(games, players, rated, table, site_dir(league, season)))
         if upload:
-            print("uploaded player files:", upload_player_actions(site_dir(league)))
+            print("uploaded player files:", upload_player_actions(site_dir(league, season)))
     print(LIABILITIES)
 
 
 if __name__ == "__main__":
     import sys
 
-    # python -m soccerhub.pipelines.action_score [--force] [--upload] ["ESP-La Liga" ...]
-    main(force="--force" in sys.argv, leagues=[a for a in sys.argv[1:] if a in LEAGUES_2015],
+    # python -m soccerhub.pipelines.action_score [--force] [--upload] ["ESP-La Liga" | 2017 ...]
+    main(force="--force" in sys.argv, only=[a for a in sys.argv[1:] if not a.startswith("--")],
          upload="--upload" in sys.argv)
