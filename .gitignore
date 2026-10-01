@@ -55,6 +55,8 @@ output/
 
 # ── Website (hand-written, IS versioned) ──────────────────────────
 !site/**
+# every action per player (~22 MB per league): served locally, live copy in Supabase Storage
+site/data/action_score/*/player_actions/
 
 # ── Local working notes (not versioned) ───────────────────────────
 /SOCCER_DS_BACKLOG.md
