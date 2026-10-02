@@ -33,8 +33,11 @@ LEAGUE_SEASONS = {
 }
 MIN_MINUTES_RANK = 900  # guess, not derived: revisit after the reliability check
 MIN_MINUTES_HALF = 450  # reliability check: minutes needed in each fold
-THIRDS = ["own", "middle", "attacking"]
-LANES = ["right", "centre", "left"]  # after left->right flip, low y = right flank (checked on 5 games)
+# zone grid: 6 bands of 17.5 m along the pitch x 5 lanes cut at the penalty-box and six-yard-box
+# edges (wings, half-spaces, centre). After the left->right flip, low y = the team's right flank.
+BAND_EDGES = [0, 17.5, 35, 52.5, 70, 87.5, 105]
+LANE_EDGES = [0, 13.84, 24.84, 43.16, 54.16, 68]
+LANES = ["right-wing", "right-half", "centre", "left-half", "left-wing"]
 SITE_DIR = Path(__file__).resolve().parents[4] / "site" / "data" / "action_score"
 
 
@@ -94,21 +97,17 @@ def rate_out_of_fold(games: pd.DataFrame, actions: pd.DataFrame, learner: str = 
     return pd.concat([out, pd.concat(values, ignore_index=True)], axis=1)
 
 
-def add_zone(actions: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
-    """Flip the away team so every team attacks left->right, then tag 9 pitch zones:
-    third (by start_x) x lane (by start_y), e.g. 'attacking-left'.
+def attack_left_to_right(actions: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """Flip the away team so every team attacks left->right (how zones and pitch maps read).
 
     Run AFTER rating: VAEP expects raw orientation and would flip the away team twice.
     """
     from socceraction.spadl import play_left_to_right
 
     home = games.set_index("game_id").home_team_id
-    out = pd.concat(
+    return pd.concat(
         [play_left_to_right(ga, home[gid]) for gid, ga in actions.groupby("game_id", sort=False)]
     ).loc[actions.index]
-    third = pd.cut(out.start_x.clip(0, 105), [0, 35, 70, 105], labels=THIRDS, include_lowest=True)
-    lane = pd.cut(out.start_y.clip(0, 68), [0, 68 / 3, 2 * 68 / 3, 68], labels=LANES, include_lowest=True)
-    return out.assign(start_zone=third.astype(str) + "-" + lane.astype(str))
 
 
 UNKNOWN_PLAYER = 0  # Wyscout files unattributed actions under player_id 0: team value, not a player
@@ -172,10 +171,17 @@ def validate(rated: pd.DataFrame, games: pd.DataFrame, players: pd.DataFrame) ->
 
 
 def zone_summary(rated: pd.DataFrame) -> pd.DataFrame:
-    """Where on the pitch each team gains or loses value."""
-    return rated.groupby(["team_id", "start_zone"], as_index=False).agg(
+    """Where on the pitch each team gains or loses value: 6 x 5 grid, each zone carrying its rectangle."""
+    band = pd.cut(rated.start_x.clip(0, 105), BAND_EDGES, labels=False, include_lowest=True)
+    lane = pd.cut(rated.start_y.clip(0, 68), LANE_EDGES, labels=False, include_lowest=True)
+    z = rated.assign(band=band, lane=lane).groupby(["team_id", "band", "lane"], as_index=False).agg(
         vaep_total=("vaep_value", "sum"), n_actions=("vaep_value", "size")
     )
+    return z.assign(
+        zone=z.band.astype(str) + "-" + z.lane.map(dict(enumerate(LANES))),
+        x0=z.band.map(BAND_EDGES.__getitem__), x1=(z.band + 1).map(BAND_EDGES.__getitem__),
+        y0=z.lane.map(LANE_EDGES.__getitem__), y1=(z.lane + 1).map(LANE_EDGES.__getitem__),
+    ).drop(columns=["band", "lane"])
 
 
 def _player_file(df: pd.DataFrame) -> dict:
@@ -274,7 +280,7 @@ def build_action_score(
     games = pd.read_parquet(src["games"].path)
     actions_m = cached_fetch(
         "action_score", "actions_vaep", params,
-        lambda: add_zone(rate_out_of_fold(games, pd.read_parquet(src["actions"].path)), games), force,
+        lambda: attack_left_to_right(rate_out_of_fold(games, pd.read_parquet(src["actions"].path)), games), force,
     )
     return {"games": src["games"], "players": src["players"], "actions_vaep": actions_m}
 

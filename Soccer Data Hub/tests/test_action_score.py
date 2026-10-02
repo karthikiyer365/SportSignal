@@ -77,10 +77,10 @@ def test_split_by_game_alternates_by_date_and_never_overlaps():
     assert split_by_game(games).to_dict() == {1: 0, 3: 1, 7: 0, 9: 1}
 
 
-def test_add_zone_flips_away_team_to_attack_left_to_right():
+def test_attack_left_to_right_flips_only_the_away_team():
     """Raw SPADL: home attacks towards x=105, away towards x=0.
     The same raw spot is the home team's attacking right but the away team's own left."""
-    from soccerhub.pipelines.action_score import add_zone
+    from soccerhub.pipelines.action_score import attack_left_to_right
 
     games = pd.DataFrame({"game_id": [1], "home_team_id": [10]})
     raw = pd.DataFrame({
@@ -88,23 +88,34 @@ def test_add_zone_flips_away_team_to_attack_left_to_right():
         "start_x": [100.0, 100.0], "start_y": [5.0, 5.0],
         "end_x": [104.0, 104.0], "end_y": [6.0, 6.0],
     })
-    z = add_zone(raw, games)
-    assert z.start_zone.tolist() == ["attacking-right", "own-left"]
+    z = attack_left_to_right(raw, games)
     assert z.start_x.tolist() == [100.0, 5.0]  # away coords now from its own attacking view
+    assert z.start_y.tolist() == [5.0, 63.0]   # its right flank (low y) becomes its left
+
+
+def test_zone_summary_is_a_6_by_5_grid_with_its_own_geometry():
+    """6 bands of 17.5 m x 5 lanes cut at the box and six-yard-box edges; off-pitch coords still land."""
+    from soccerhub.pipelines.action_score import zone_summary
+
+    rated = pd.DataFrame({"team_id": 10, "vaep_value": [0.1, 0.2, 0.3, 0.4],
+                          "start_x": [0.0, 104.9, 52.0, 106.0], "start_y": [0.0, 67.9, 34.0, -1.0]})
+    z = zone_summary(rated).set_index("zone")
+    assert set(z.index) == {"0-right-wing", "5-left-wing", "2-centre", "5-right-wing"}
+    assert z.loc["0-right-wing", ["x0", "x1", "y0", "y1"]].tolist() == [0.0, 17.5, 0.0, 13.84]
+    assert z.loc["2-centre", ["x0", "x1", "y0", "y1"]].tolist() == [35.0, 52.5, 24.84, 43.16]
+    assert z.loc["5-right-wing", "n_actions"] == 1
 
 
 def test_rating_zones_and_player_table(season):
     from soccerhub.pipelines import action_score as a
 
     games, actions, players = season
-    rated = a.add_zone(a.rate_out_of_fold(games, actions), games)
+    rated = a.attack_left_to_right(a.rate_out_of_fold(games, actions), games)
 
     assert len(rated) == len(actions)
     assert rated.groupby("game_id").fold.nunique().eq(1).all()
     assert rated[["offensive_value", "defensive_value", "vaep_value"]].notna().all().all()
     assert rated.p_scores.between(0, 1).all()
-    zones = {f"{t}-{l}" for t in a.THIRDS for l in a.LANES}
-    assert rated.start_zone.isin(zones).all()
 
     table = a.player_table(rated, players).set_index("player_id")
     assert table.loc[100, "minutes"] == 360
@@ -116,7 +127,7 @@ def test_validation_and_site_export(season, tmp_path):
     from soccerhub.pipelines import action_score as a
 
     games, actions, players = season
-    rated = a.add_zone(a.rate_out_of_fold(games, actions), games)
+    rated = a.attack_left_to_right(a.rate_out_of_fold(games, actions), games)
     table = a.player_table(rated, players)
 
     report = a.validate(rated, games, players)
@@ -148,7 +159,7 @@ def test_validation_and_site_export(season, tmp_path):
                          "home_score": 2, "away_score": 1}  # scores let the page build the league table
 
     zones = json.loads((tmp_path / "zones.json").read_text())
-    assert len(zones) <= 2 * 9
+    assert len(zones) <= 2 * 30 and {"zone", "x0", "x1", "y0", "y1"} <= zones[0].keys()
     first = json.loads((tmp_path / "players.json").read_text())[0]
     assert {"player_name", "team_name", "minutes", "vaep_per90"} <= first.keys()
 
@@ -225,14 +236,14 @@ def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypat
 
 def test_unknown_player_placeholder_is_not_a_player(season):
     """Wyscout files unattributed actions under player_id 0: they count for the team, not as a player."""
-    from soccerhub.pipelines.action_score import add_zone, player_table, rate_out_of_fold
+    from soccerhub.pipelines.action_score import attack_left_to_right, player_table, rate_out_of_fold
 
     games, actions, players = season
     actions = actions.copy()
     actions.loc[actions.index[:5], "player_id"] = 0
     players = pd.concat([players, pd.DataFrame([{"game_id": 1, "team_id": 10, "team_name": "Leicester City",
                                                  "player_id": 0, "player_name": None, "minutes_played": 7}])])
-    rated = add_zone(rate_out_of_fold(games, actions), games)
+    rated = attack_left_to_right(rate_out_of_fold(games, actions), games)
     assert 0 not in set(player_table(rated, players).player_id)
 
 
