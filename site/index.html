@@ -203,5 +203,26 @@
   </div>
 </footer>
 
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-WMVWTJ7M4X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-WMVWTJ7M4X');
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('a, button, [role=button], [data-track]');
+    if (!el) return;
+    var href = el.tagName === 'A' ? el.href : undefined;
+    gtag('event', 'click_through', {
+      label: el.dataset.track || el.getAttribute('aria-label') || (el.textContent || '').trim().slice(0, 60) || '(unlabeled)',
+      element: el.tagName.toLowerCase(),
+      href: href,
+      dest_host: href ? new URL(href).hostname : undefined,
+      page_path: location.pathname,
+      page_host: location.hostname
+    });
+  }, true);
+</script>
 </body>
 </html>
