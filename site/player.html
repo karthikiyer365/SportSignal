@@ -1820,7 +1820,9 @@ window.hidePizza = () => hideTip();
   document.addEventListener('click', function (e) {
     var el = e.target.closest('a, button, [role=button], [data-track]');
     if (!el) return;
-    var href = el.tagName === 'A' ? el.href : undefined;
+    // gtag appends _gl (client id) to cross-subdomain links on click; drop it so href groups.
+    var href;
+    if (el.tagName === 'A') { var u = new URL(el.href); u.searchParams.delete('_gl'); href = u.toString(); }
     gtag('event', 'click_through', {
       label: el.dataset.track || el.getAttribute('aria-label') || (el.textContent || '').trim().slice(0, 60) || '(unlabeled)',
       element: el.tagName.toLowerCase(),
