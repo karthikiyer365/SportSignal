@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitcher Perfect — SportSignal</title>
+<meta name="description" content="Pitcher Perfect: every MLB pitcher's arsenal, release, location and spin, 2020–2026, live from Statcast.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚾</text></svg>">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* chrome copied from player.html so both dashboards read as one site */
+  .disp{font-family:"Avenir Next Condensed","Arial Narrow","Helvetica Neue Condensed",Impact,sans-serif;
+        text-transform:uppercase;letter-spacing:.04em;font-stretch:condensed}
+  .searchwrap{position:relative;flex:1;max-width:440px}
+  #search{width:100%;padding:9px 14px;border-radius:999px;border:1px solid var(--rule);
+       background:var(--field);color:var(--ink);font:inherit;font-size:.95rem}
+  #search::placeholder{color:var(--kick)}
+  #search:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  #results{position:absolute;top:110%;left:0;right:0;background:#fff;border:1px solid var(--rule);
+       border-radius:6px;overflow:hidden auto;display:none;max-height:320px;z-index:7;
+       box-shadow:0 8px 24px rgba(16,24,40,.08)}
+  #results button{display:flex;justify-content:space-between;gap:12px;width:100%;
+       padding:10px 14px;border:0;background:none;color:var(--ink);font:inherit;
+       font-size:.9rem;text-align:left;cursor:pointer}
+  #results button:hover,#results button:focus-visible{background:#f1f8f4;outline:none}
+  #results .sub{color:var(--kick);font-size:.8rem;white-space:nowrap}
+  .brandsub{color:var(--soft);font-size:.85rem;white-space:nowrap}
+
+  main{max-width:1560px;margin:0 auto;padding:24px 20px 80px}
+  .empty{padding:80px 20px;max-width:46ch;margin:0 auto}
+  .empty .disp{font-size:1.6rem}
+
+  .herostrip{border-radius:14px;padding:18px 24px;
+        background:linear-gradient(160deg,#17624a 0%,#12543e 55%,#0e4634 100%);
+        border:1px solid rgba(255,180,58,.45);
+        box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+        display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+  .idbox{min-width:250px}
+  .idbox h1{margin:0;font-size:30px;line-height:.95;color:#fff}
+  .idbox p{margin:6px 0 0;color:var(--muted);font-size:12.5px}
+  .facts{flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px;
+         text-align:center;border-left:1px solid rgba(242,245,239,.15);padding-left:24px}
+  .facts label{display:block;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .facts b{font-size:18px}
+  @media(max-width:1100px){.facts{grid-template-columns:repeat(3,minmax(0,1fr));border-left:0;padding-left:0}}
+  .cardnote{margin:10px 0 0;font-size:11.5px;color:var(--soft)}
+
+  .chips{margin:26px 0 0}
+  #body{padding-top:22px;display:flex;flex-direction:column;gap:22px}
+
+  .box{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;color:var(--line)}
+  .box h2{margin:0 0 10px;font-size:.8rem;letter-spacing:.16em;
+        text-transform:uppercase;color:var(--tag);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .box h2 .plain{color:var(--muted);letter-spacing:0;text-transform:none}
+  .box p.cap{margin:10px 0 0;font-size:12px;color:var(--muted)}
+  .chartbox{position:relative}
+  .chartbox svg{width:100%;height:auto;display:block}
+  svg text{font:10px system-ui;fill:var(--axis)}
+  #tip{position:fixed;z-index:9;pointer-events:none;display:none;background:#10221a;
+       border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:.8rem;
+       color:var(--line);box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:230px}
+  #tip .t{color:var(--tag);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+
+  .techduo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:stretch}
+  @media(max-width:1100px){.techduo{grid-template-columns:1fr}}
+
+  .scroll{overflow-x:auto}
+  table.log{border-collapse:collapse;width:100%;font-size:.88rem;min-width:860px}
+  table.log th,table.log td{padding:8px 12px;text-align:right;border-top:1px solid rgba(242,245,239,.08)}
+  table.log th{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tag);font-weight:600}
+  table.log th:first-child,table.log td:first-child{text-align:left}
+  table.log tbody tr:hover{background:rgba(255,180,58,.06)}
+  .dim{color:var(--muted)}
+  .swatch{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:-1px}
+
+  /* pitch-type filter for the K-zone, styled like player.html's .band chips */
+  .ptchips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+  .ptchips button{border:1px solid var(--border);background:rgba(242,245,239,.03);color:var(--muted);
+       border-radius:999px;padding:3px 11px;font:inherit;font-size:.78rem;cursor:pointer}
+  .ptchips button[aria-pressed="true"]{border-color:var(--amber);background:rgba(255,180,58,.12);color:var(--line)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+  .loading{min-height:120px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="home disp" href="index.html">SportSignal</a>
+  <span class="brandsub">⚾ Pitcher Perfect</span>
+  <div class="searchwrap">
+    <input id="search" type="search" placeholder="Search any MLB pitcher, 2020–2026…"
+           autocomplete="off" aria-label="Search pitcher">
+    <div id="results" role="listbox"></div>
+  </div>
+</nav>
+
+<main id="main"><div class="empty">Loading…</div></main>
+<div id="tip" role="status"></div>
+
+<script>
+const SUPABASE_URL = "https://rgnzemkdldohplwbxxwy.supabase.co";
+const ANON_KEY = "sb_publishable_Qy0bJ4CdrxffuJGNq12ebw_r0-Z3qD-";
+// Baseball Savant serves this CSV with access-control-allow-origin: *, so the browser fetches it live.
+const SAVANT_CSV = "https://baseballsavant.mlb.com/statcast_search/csv";
+const MIN_PITCHES_POOL = 300;   // radar pool: pitchers with at least this many pitches that season
+const MIN_PITCHES_RV = 50;      // whiff% is blank below this (pipeline floor, notebook chart V4)
+const DEFAULT_PITCHER = "694973"; // Paul Skenes
+const FASTBALLS = ["FF", "SI"];
+
+// Validated against --card (#0f4a36): lightness band, chroma, CVD, contrast all pass.
+const PT = {
+  FF: ["#ef5d51", "4-seam"], SL: ["#4f93ec", "Slider"], SI: ["#d47a14", "Sinker"],
+  ST: ["#9f7bee", "Sweeper"], FC: ["#b08f18", "Cutter"], CU: ["#16a0a8", "Curve"],
+  KC: ["#16a0a8", "Knuckle-curve"], CH: ["#74a42a", "Changeup"], FS: ["#dc60a8", "Splitter"],
+};
+const ptColor = t => PT[t]?.[0] ?? "rgba(242,245,239,.45)";
+const ptName = t => PT[t]?.[1] ?? t;
+
+async function hub(table, params){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${new URLSearchParams(params)}`,
+                        {headers:{apikey: ANON_KEY}});
+  if(!r.ok) throw new Error(`${table}: ${r.status}`);
+  return r.json();
+}
+async function hubAll(table, params){   // Supabase caps every response at 1000 rows
+  const PAGE = 1000, rows = [];
+  for(let offset = 0;; offset += PAGE){
+    const page = await hub(table, {...params, limit:String(PAGE), offset:String(offset)});
+    rows.push(...page);
+    if(page.length < PAGE) return rows;
+  }
+}
+
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const showTip = (e, html) => { const t = document.getElementById("tip"); t.innerHTML = html;
+  t.style.display = "block"; t.style.left = Math.min(e.clientX+14, innerWidth-244)+"px";
+  t.style.top = (e.clientY+14)+"px"; };
+const hideTip = () => document.getElementById("tip").style.display = "none";
+const fmt = (v, d=1) => v == null || Number.isNaN(v) ? "—" : (+v).toFixed(d);
+const pct = v => v == null ? "—" : `${Math.round(v*100)}%`;
+const niceName = n => (n ?? "").includes(", ") ? n.split(", ").reverse().join(" ") : (n ?? "");
+const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+const sd = a => { const m = mean(a); return a.length > 1 ? Math.sqrt(mean(a.map(v => (v-m)**2))) : 0; };
+const circMean = deg => { const r = deg.map(d => d*Math.PI/180);
+  return ((Math.atan2(mean(r.map(Math.sin)), mean(r.map(Math.cos)))*180/Math.PI) + 360) % 360; };
+// Statcast spin axis -> clock tilt (180° = 12:00 backspin)
+// pitch_arsenal stores LHP mirrored (spin_axis -> 360 - axis); callers un-mirror before calling tilt()
+const tilt = axis => { const h = ((axis + 180) % 360) / 30, hh = Math.floor(h) || 12, mm = Math.round((h % 1)*60/15)*15;
+  return mm === 60 ? `${hh % 12 + 1}:00` : `${hh}:${String(mm).padStart(2,"0")}`; };
+
+/* ---------- live pitches from Baseball Savant ---------- */
+function parseCsv(text){
+  const rows = []; let row = [], f = "", q = false;
+  text = text.replace(/^﻿/, "");
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(q){ if(c === '"'){ if(text[i+1] === '"'){ f += '"'; i++; } else q = false; } else f += c; }
+    else if(c === '"') q = true;
+    else if(c === ","){ row.push(f); f = ""; }
+    else if(c === "\n"){ row.push(f); rows.push(row); row = []; f = ""; }
+    else if(c !== "\r") f += c;
+  }
+  if(f || row.length){ row.push(f); rows.push(row); }
+  const head = rows.shift() ?? [];
+  return rows.filter(r => r.length === head.length)
+             .map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+}
+const NUM = ["release_speed","release_pos_x","release_pos_z","plate_x","plate_z","pfx_x","pfx_z",
+             "spin_axis","release_spin_rate","release_extension","arm_angle","balls","strikes","sz_top","sz_bot"];
+const pitchCache = new Map();
+async function fetchPitches(pitcherId, season){
+  const key = `${pitcherId}-${season}`;
+  if(pitchCache.has(key)) return pitchCache.get(key);
+  const u = `${SAVANT_CSV}?all=true&hfGT=R%7C&hfSea=${season}%7C&player_type=pitcher` +
+            `&pitchers_lookup%5B%5D=${pitcherId}&type=details`;
+  const r = await fetch(u);
+  if(!r.ok) throw new Error(`Baseball Savant ${r.status}`);
+  const rows = parseCsv(await r.text()).filter(p => p.pitch_type && p.pitch_type !== "PO");
+  for(const p of rows) for(const k of NUM) p[k] = p[k] === "" ? null : +p[k];
+  rows.sort((a, b) => a.game_date.localeCompare(b.game_date));
+  pitchCache.set(key, rows);
+  return rows;
+}
+
+/* ---------- search ---------- */
+const box = document.getElementById("search"), list = document.getElementById("results");
+let deb;
+box.addEventListener("input", () => {
+  clearTimeout(deb);
+  const q = box.value.trim();
+  if(q.length < 3){ list.style.display = "none"; return; }
+  deb = setTimeout(() => runSearch(q), 300);
+});
+document.addEventListener("click", e => { if(!e.target.closest(".searchwrap")) list.style.display = "none"; });
+
+async function runSearch(q){
+  const found = await hub("pitch_arsenal", {select:"pitcher,pitcher_name,season",
+    pitcher_name:`ilike.*${q}*`, order:"season.desc", limit:"200"});
+  const seen = new Set(), picks = [];
+  for(const r of found){ if(seen.has(r.pitcher)) continue; seen.add(r.pitcher); picks.push(r); if(picks.length === 8) break; }
+  list.innerHTML = picks.length ? "" : "<button disabled>No pitchers found</button>";
+  for(const p of picks){
+    const b = document.createElement("button");
+    b.setAttribute("role", "option");
+    b.innerHTML = `<span>${esc(niceName(p.pitcher_name))}</span><span class="sub">latest ${p.season}</span>`;
+    b.onclick = () => { list.style.display = "none"; box.value = ""; go({p: p.pitcher, s: null}); };
+    list.appendChild(b);
+  }
+  list.style.display = "block";
+}
+
+/* ---------- page state: ?p=<mlbam id>&s=<season> ---------- */
+const qs = () => new URLSearchParams(location.search);
+function go({p, s}){
+  const u = new URL(location), q = new URLSearchParams();
+  q.set("p", p ?? qs().get("p"));
+  if(s) q.set("s", s);
+  u.search = "?" + q; history.pushState({}, "", u); load();
+}
+window.addEventListener("popstate", load);
+
+let arsenal = [], seasons = [];
+const poolCache = new Map();
+async function seasonPool(season){
+  if(!poolCache.has(season))
+    poolCache.set(season, hubAll("pitch_arsenal", {select:"pitcher,pitch_type,n,usage_pct,velo,spin,ivb_in,extension,whiff_pct",
+                                                   season:`eq.${season}`}));
+  return poolCache.get(season);
+}
+
+load();
+async function load(){
+  const main = document.getElementById("main");
+  const pid = qs().get("p");
+  if(!pid){ history.replaceState({}, "", `?p=${DEFAULT_PITCHER}`); return load(); }
+  try{
+    arsenal = await hubAll("pitch_arsenal", {select:"*", pitcher:`eq.${pid}`, order:"season"});
+  }catch(e){
+    main.innerHTML = `<div class="empty">Could not reach the database (${esc(e.message)}). Try again.</div>`; return;
+  }
+  if(!arsenal.length){ main.innerHTML = `<div class="empty">No seasons found for this pitcher.</div>`; return; }
+  seasons = [...new Set(arsenal.map(r => r.season))].sort();
+  const s = seasons.includes(+qs().get("s")) ? +qs().get("s") : seasons[seasons.length-1];
+  render(pid, s);
+}
+
+/* ---------- pitcher-level radar inputs (one per pitcher-season, from pitch_arsenal) ---------- */
+function pitcherProfile(rows){
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  const fb = rows.filter(r => FASTBALLS.includes(r.pitch_type)).sort((a, b) => b.n - a.n)[0];
+  const sec = rows.filter(r => !FASTBALLS.includes(r.pitch_type) && r.whiff_pct != null);
+  const wRows = rows.filter(r => r.whiff_pct != null);
+  const wsum = wRows.reduce((s, r) => s + r.n, 0);
+  return {
+    total,
+    fbVelo: fb?.velo ?? null, fbRide: fb?.ivb_in ?? null, fbSpin: fb?.spin ?? null,
+    extension: rows.reduce((s, r) => s + (r.extension ?? 0)*r.n, 0) / total,
+    bestSecWhiff: sec.length ? Math.max(...sec.map(r => r.whiff_pct)) : null,
+    whiff: wsum ? wRows.reduce((s, r) => s + r.whiff_pct*r.n, 0) / wsum : null,
+    depth: rows.filter(r => (r.usage_pct ?? 0) >= 0.10).length,
+  };
+}
+const RADAR = [
+  {key:"fbVelo", lab:"Fastball velo", f: v => `${fmt(v)} mph`, group:"Fastball", color:"#ef5d51"},
+  {key:"fbRide", lab:"Fastball ride", f: v => `${fmt(v)}"`, group:"Fastball", color:"#ef5d51"},
+  {key:"fbSpin", lab:"Fastball spin", f: v => `${fmt(v,0)} rpm`, group:"Fastball", color:"#ef5d51"},
+  {key:"extension", lab:"Extension", f: v => `${fmt(v)} ft`, group:"Delivery", color:"#d47a14"},
+  {key:"bestSecWhiff", lab:"Best secondary whiff", f: pct, group:"Bat-missing", color:"#4f93ec"},
+  {key:"whiff", lab:"Overall whiff", f: pct, group:"Bat-missing", color:"#4f93ec"},
+  {key:"depth", lab:"Arsenal depth", f: v => `${v} pitches ≥10%`, group:"Arsenal", color:"#9f7bee"},
+];
+function percentile(vals, v){
+  if(v == null) return null;
+  const xs = vals.filter(x => x != null);
+  if(!xs.length) return null;
+  const below = xs.filter(x => x < v).length, eq = xs.filter(x => x === v).length;
+  return Math.round(100 * (below + eq/2) / xs.length);
+}
+
+/* ---------- render ---------- */
+async function render(pid, season){
+  const rows = arsenal.filter(r => r.season === season);
+  const name = niceName(rows[0]?.pitcher_name ?? arsenal[arsenal.length-1].pitcher_name);
+  const throws = rows[0]?.p_throws;
+  const prof = pitcherProfile(rows);
+  document.title = `${name} — Pitcher Perfect`;
+
+  const chips = seasons.map(x => `<button data-s="${x}" aria-pressed="${x === season}">${x}${x === 2020 ? "*" : ""}</button>`).join("");
+  const armMean = mean(rows.filter(r => r.arm_angle != null).map(r => r.arm_angle));
+  document.getElementById("main").innerHTML = `
+  <div class="herostrip">
+    <div class="idbox">
+      <h1 class="disp">${esc(name)}</h1>
+      <p>${throws === "L" ? "Left" : "Right"}-handed pitcher · ${season} regular season · Statcast</p>
+    </div>
+    <div class="facts nums">
+      <div><label>Pitches</label><b>${prof.total.toLocaleString("en")}</b></div>
+      <div><label>Fastball velo</label><b>${fmt(prof.fbVelo)}</b></div>
+      <div><label>Fastball ride</label><b>${fmt(prof.fbRide)}"</b></div>
+      <div><label>Extension</label><b>${fmt(prof.extension)} ft</b></div>
+      <div><label>Arm angle</label><b>${fmt(armMean, 0)}°</b></div>
+      <div><label>Whiff</label><b>${pct(prof.whiff)}</b></div>
+      <div><label>Pitch types</label><b>${rows.length}</b></div>
+    </div>
+  </div>
+  <p class="cardnote">${season === 2020 ? "*2020 was a 60-game season. " : ""}Arsenal and radar come from the SportSignal database
+     (pitch types thrown 25+ times). Pitch-level charts load live from Baseball Savant.</p>
+  <div class="chips nums" id="chips">${chips}</div>
+  <div id="body">
+    <div class="box"><h2>Arsenal <span class="plain">· ${season}</span></h2>${arsenalTable(rows)}
+      <p class="cap">Break is in inches, from the catcher's view. Whiff% = whiffs per swing, blank under ${MIN_PITCHES_RV} pitches.
+         Run value per 100 pitches (+ = good for the pitcher) is <b>results, not skill</b>: it needs far more than a season to settle.</p></div>
+    <div class="techduo">
+      <div class="box"><h2>Pitcher profile <span class="plain">· percentile vs MLB pitchers, ${season}</span></h2>
+        <div class="chartbox" id="radar"><div class="loading">Ranking against the league…</div></div>
+        <p class="cap">Each axis is a percentile among pitchers with ${MIN_PITCHES_POOL}+ pitches this season; outer ring = 100th.
+          Higher is better on every axis. Arm angle and release height are style, not quality, so they sit in their own charts.</p></div>
+      <div class="box"><h2>Velo by season <span class="plain">· pitch types thrown 25+ times</span></h2>
+        <div class="chartbox">${veloTrend(arsenal)}</div>
+        <p class="cap">Season average velocity per pitch type. A drop of 1+ mph year over year is worth a look.</p></div>
+    </div>
+    <div id="live"><div class="box"><div class="loading">Loading ${esc(name)}'s ${season} pitches from Baseball Savant…</div></div></div>
+  </div>`;
+
+  document.getElementById("chips").addEventListener("click", e => {
+    const v = e.target.dataset?.s; if(v) go({p: pid, s: v});
+  });
+
+  seasonPool(season).then(pool => {
+    const by = new Map();
+    for(const r of pool){ if(!by.has(r.pitcher)) by.set(r.pitcher, []); by.get(r.pitcher).push(r); }
+    const profiles = [...by.values()].map(pitcherProfile).filter(p => p.total >= MIN_PITCHES_POOL);
+    const slices = RADAR.map(a => ({...a, raw: prof[a.key], pct: percentile(profiles.map(p => p[a.key]), prof[a.key])}));
+    document.getElementById("radar").innerHTML = pitcherRadar(slices) +
+      `<p class="cap" style="text-align:center">${profiles.length} pitchers in the pool${prof.total < MIN_PITCHES_POOL
+        ? ` · ${esc(name)} threw fewer than ${MIN_PITCHES_POOL} pitches, so read this as a small sample` : ""}</p>`;
+  }).catch(e => document.getElementById("radar").innerHTML = `<p class="cap">Could not load the league pool (${esc(e.message)}).</p>`);
+
+  try{
+    const pitches = await fetchPitches(pid, season);
+    if(qs().get("p") !== String(pid)) return;            // user moved on while Savant was loading
+    renderLive(pitches, rows);
+  }catch(e){
+    document.getElementById("live").innerHTML = `<div class="box"><p class="cap">Baseball Savant did not respond
+      (${esc(e.message)}). The arsenal above comes from our own database and is still current. Try again in a minute.</p></div>`;
+  }
+}
+
+function arsenalTable(rows){
+  const order = [...rows].sort((a, b) => b.n - a.n);
+  const tr = r => `<tr>
+    <td><span class="swatch" style="background:${ptColor(r.pitch_type)}"></span>${esc(ptName(r.pitch_type))} <span class="dim">${esc(r.pitch_type)}</span></td>
+    <td>${r.n}</td><td>${pct(r.usage_pct)}</td><td>${fmt(r.velo)}</td><td>${fmt(r.spin,0)}</td>
+    <td>${r.spin_axis == null ? "—" : tilt(r.p_throws === "L" ? 360 - r.spin_axis : r.spin_axis)}</td>
+    <td>${fmt(r.ivb_in)}</td><td>${fmt(r.hb_arm_in)}</td><td>${fmt(r.extension)}</td><td>${fmt(r.arm_angle,0)}°</td>
+    <td>${r.whiff_pct == null ? '<span class="dim">—</span>' : pct(r.whiff_pct)}</td>
+    <td class="dim">${r.rv_per_100 == null ? "—" : (r.rv_per_100 > 0 ? "+" : "") + fmt(r.rv_per_100)}</td></tr>`;
+  return `<div class="scroll"><table class="log nums"><thead><tr><th>Pitch</th><th>Pitches</th><th>Usage</th>
+    <th>Velo</th><th>Spin</th><th>Tilt</th><th>Ride (IVB)</th><th>Arm-side run</th><th>Ext</th><th>Arm angle</th>
+    <th>Whiff%</th><th>Results RV/100</th></tr></thead><tbody>${order.map(tr).join("")}</tbody></table></div>`;
+}
+
+/* ---------- shared SVG scaffolding ---------- */
+function axes({W, H, L, R, T, B, x0, x1, y0, y1, xt, yt, xl, yl}){
+  const X = v => L + (v - x0) / (x1 - x0) * (W - L - R), Y = v => H - B - (v - y0) / (y1 - y0) * (H - T - B);
+  let g = "";
+  for(const v of xt) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H-B}" stroke="var(--grid)"/>
+    <text x="${X(v)}" y="${H-B+14}" text-anchor="middle">${v}</text>`;
+  for(const v of yt) g += `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/>
+    <text x="${L-6}" y="${Y(v)+3}" text-anchor="end">${v}</text>`;
+  g += `<text x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${xl}</text>
+    <text transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">${yl}</text>`;
+  return {X, Y, g};
+}
+const ticks = (a, b, step) => { const t = []; for(let v = Math.ceil(a/step)*step; v <= b + 1e-9; v += step) t.push(+v.toFixed(2)); return t; };
+const dotTip = p => `<div class="t">${esc(ptName(p.pitch_type))} · ${esc(p.game_date)}</div>
+  ${fmt(p.release_speed)} mph · ${fmt(p.release_spin_rate,0)} rpm<br>${p.balls}-${p.strikes} count vs ${p.stand}HB · ${esc((p.description||"").replaceAll("_"," "))}`;
+window.dotHover = e => { const c = e.target.closest("circle[data-i]"); if(!c){ hideTip(); return; }
+  const p = window._pitches?.[+c.dataset.i]; if(p) showTip(e, dotTip(p)); };
+
+function veloTrend(rows){
+  const W = 560, H = 300, types = [...new Set(rows.map(r => r.pitch_type))];
+  const ss = [...new Set(rows.map(r => r.season))].sort(), vs = rows.map(r => r.velo).filter(v => v != null);
+  if(ss.length < 2) return `<div class="loading">One season so far — the trend appears with a second.</div>`;
+  const lo = Math.floor(Math.min(...vs) - 1), hi = Math.ceil(Math.max(...vs) + 1);
+  const {X, Y, g} = axes({W, H, L:44, R:84, T:14, B:34, x0: ss[0]-.3, x1: ss[ss.length-1]+.3, y0: lo, y1: hi,
+    xt: ss, yt: ticks(lo, hi, hi - lo > 12 ? 4 : 2), xl: "season", yl: "mph"});
+  let s = g;
+  const ends = [];
+  for(const t of types){
+    const pts = rows.filter(r => r.pitch_type === t && r.velo != null).sort((a, b) => a.season - b.season);
+    const c = ptColor(t);
+    s += `<polyline points="${pts.map(r => `${X(r.season)},${Y(r.velo)}`).join(" ")}" fill="none" stroke="${c}" stroke-width="2"/>`;
+    s += pts.map(r => `<circle cx="${X(r.season)}" cy="${Y(r.velo)}" r="4" fill="${c}" stroke="var(--card)" stroke-width="2"
+      onmousemove="showTip(event,'<div class=t>${ptName(t)} · ${r.season}</div>${fmt(r.velo)} mph · ${r.n} pitches')" onmouseleave="hideTip()"/>`).join("");
+    const last = pts[pts.length-1];
+    if(last) ends.push({x: X(last.season) + 8, y: Y(last.velo) + 3, text: `${t} ${fmt(last.velo)}`});
+  }
+  // end labels: spread vertically so close velos (FF vs SI) never print on top of each other
+  ends.sort((a, b) => a.y - b.y).forEach((e, i, a) => { if(i && e.x === a[i-1].x && e.y - a[i-1].y < 12) e.y = a[i-1].y + 12; });
+  s += ends.map(e => `<text x="${e.x}" y="${e.y}" style="fill:var(--line)">${e.text}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Velocity by season and pitch type">${s}</svg>`;
+}
+
+function pitcherRadar(slices){
+  const S = 440, cx = S/2, cy = S/2, R0 = 30, R1 = 140, N = slices.length, step = 2*Math.PI/N;
+  const ang = i => -Math.PI/2 + i*step, rad = p => R0 + (R1-R0)*(p ?? 0)/100;
+  const at = (i, p) => [cx + rad(p)*Math.cos(ang(i)), cy + rad(p)*Math.sin(ang(i))];
+  let g = "";
+  for(const f of [.25,.5,.75,1]) g += `<circle cx="${cx}" cy="${cy}" r="${R0+(R1-R0)*f}" fill="none"
+    stroke="var(--grid)" stroke-dasharray="${f===1?"none":"2 4"}"/>`;
+  g += `<circle cx="${cx}" cy="${cy}" r="${rad(50)}" fill="none" stroke="var(--line)" stroke-opacity=".3" stroke-dasharray="1 5"/>`;
+  slices.forEach((s, i) => { const [x, y] = at(i, 100); g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)"/>`; });
+  g += `<polygon points="${slices.map((s, i) => at(i, s.pct).join(",")).join(" ")}" fill="#ffb43a" fill-opacity=".18"
+    stroke="#ffb43a" stroke-width="2.5" stroke-linejoin="round"/>`;
+  slices.forEach((s, i) => { if(s.pct == null) return; const [x, y] = at(i, s.pct);
+    g += `<circle cx="${x}" cy="${y}" r="6" fill="${s.color}" stroke="var(--card)" stroke-width="2"
+      onmousemove="showTip(event,'<div class=t>${s.group}</div>${s.lab}: <b>${esc(s.f(s.raw))}</b> · ${s.pct}th pct')" onmouseleave="hideTip()"/>`; });
+  slices.forEach((s, i) => { const a = ang(i), lx = cx + (R1+26)*Math.cos(a), ly = cy + (R1+26)*Math.sin(a) - (Math.sin(a) < -.9 ? 10 : 0);
+    const anchor = Math.abs(Math.cos(a)) < .2 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
+    g += `<text x="${lx}" y="${ly}" text-anchor="${anchor}" dominant-baseline="middle" font-size="11" style="fill:var(--line)">${s.lab}</text>
+      <text x="${lx}" y="${ly+13}" text-anchor="${anchor}" dominant-baseline="middle" font-size="10">${s.pct == null ? "—" : s.pct + "th"}</text>`; });
+  return `<svg viewBox="-60 0 ${S+120} ${S}" aria-label="Pitcher percentile radar">${g}</svg>`;
+}
+
+/* ---------- live charts ---------- */
+function renderLive(pitches, rows){
+  window._pitches = pitches;
+  const types = [...rows].sort((a, b) => b.n - a.n).map(r => r.pitch_type).filter(t => pitches.some(p => p.pitch_type === t));
+  const legend = `<div class="legend">${types.map(t => `<span><span class="swatch" style="background:${ptColor(t)}"></span>${ptName(t)}</span>`).join("")}</div>`;
+  document.getElementById("live").innerHTML = `
+    <div class="techduo">
+      <div class="box"><h2>Pitch location <span class="plain">· catcher's view</span></h2>
+        <div class="ptchips" id="ptchips"><button data-t="" aria-pressed="true">All</button>${types.map(t =>
+          `<button data-t="${t}" aria-pressed="false">${ptName(t)}</button>`).join("")}</div>
+        <div class="chartbox" id="kzone">${kZone(pitches, "")}</div>
+        <p class="cap">Strike zone from this pitcher's average zone top and bottom. Where each pitch type lives tells you its job: fastballs up, breaking balls down and away, chase pitches below the zone.</p></div>
+      <div class="box"><h2>Movement <span class="plain">· every pitch, inches, catcher's view</span></h2>
+        <div class="chartbox">${movementPlot(pitches, types)}</div>${legend}
+        <p class="cap">Ride (induced vertical break) against horizontal break, gravity removed. Separation between clusters is what makes a mix hard to read.</p></div>
+    </div>
+    <div class="techduo">
+      <div class="box"><h2>Release point <span class="plain">· catcher's view, feet</span></h2>
+        <div class="chartbox">${releasePlot(pitches, types)}</div>${legend}
+        <p class="cap">A tight, shared release hides which pitch is coming. Extension per pitch type is in the arsenal table.</p></div>
+      <div class="box"><h2>Spin direction <span class="plain">· tilt on a clock face, distance = spin rate</span></h2>
+        <div class="chartbox">${spinClock(pitches, types)}</div>
+        <p class="cap">Tilt as Statcast reports it: 12:00 is pure backspin (ride), 6:00 pure topspin (drop). Further from the centre = more spin.</p></div>
+    </div>
+    <div class="techduo">
+      <div class="box"><h2>Velo by pitch type <span class="plain">· every pitch, gap to the fastball</span></h2>
+        <div class="chartbox">${veloPlot(pitches, types)}</div>
+        <p class="cap">Labels show each pitch's average velo and its gap to the primary fastball (d_velo). Offspeed pitches usually want 8+ mph of gap.</p></div>
+      <div class="box"><h2>Arm angle and velo by game <span class="plain">· primary fastball</span></h2>
+        <div class="chartbox">${gamePlot(pitches, types)}</div>
+        <p class="cap">Game averages through the season. A falling arm angle together with falling velo is a classic fatigue or injury flag.</p></div>
+    </div>
+    <div class="box"><h2>Pitch mix by situation</h2>
+      <div class="chartbox">${usagePlot(pitches, types)}</div>${legend}
+      <p class="cap">Share of pitches by type. Ahead = more strikes than balls; behind = more balls; two strikes = put-away counts.</p></div>`;
+  document.getElementById("ptchips").addEventListener("click", e => {
+    const b = e.target.closest("button[data-t]"); if(!b) return;
+    document.querySelectorAll("#ptchips button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    document.getElementById("kzone").innerHTML = kZone(pitches, b.dataset.t);
+  });
+}
+
+function kZone(pitches, only){
+  const W = 420, H = 460;
+  const {X, Y, g} = axes({W, H, L:40, R:14, T:12, B:34, x0:-2.2, x1:2.2, y0:-0.5, y1:5,
+    xt: [-2, -1, 0, 1, 2], yt: [0, 1, 2, 3, 4, 5], xl: "feet from centre of plate", yl: "feet above ground"});
+  const top = mean(pitches.map(p => p.sz_top).filter(v => v != null)) ?? 3.4;
+  const bot = mean(pitches.map(p => p.sz_bot).filter(v => v != null)) ?? 1.6;
+  const half = 17/24;   // plate is 17 inches wide
+  let s = g + `<rect x="${X(-half)}" y="${Y(top)}" width="${X(half)-X(-half)}" height="${Y(bot)-Y(top)}"
+    fill="none" stroke="var(--line)" stroke-width="1.5"/>`;
+  for(let i = 1; i < 3; i++){
+    const xv = -half + i*2*half/3, yv = bot + i*(top-bot)/3;
+    s += `<line x1="${X(xv)}" x2="${X(xv)}" y1="${Y(top)}" y2="${Y(bot)}" stroke="var(--line)" stroke-opacity=".25"/>
+          <line x1="${X(-half)}" x2="${X(half)}" y1="${Y(yv)}" y2="${Y(yv)}" stroke="var(--line)" stroke-opacity=".25"/>`;
+  }
+  s += `<polygon points="${X(-half)},${Y(-.1)} ${X(half)},${Y(-.1)} ${X(half)},${Y(-.25)} ${X(0)},${Y(-.4)} ${X(-half)},${Y(-.25)}"
+    fill="var(--line)" fill-opacity=".15" stroke="var(--line)" stroke-opacity=".4"/>`;
+  pitches.forEach((p, i) => { if(p.plate_x == null || (only && p.pitch_type !== only)) return;
+    s += `<circle data-i="${i}" cx="${X(p.plate_x).toFixed(1)}" cy="${Y(p.plate_z).toFixed(1)}" r="3.6"
+      fill="${ptColor(p.pitch_type)}" fill-opacity=".55"/>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Pitch locations" onmousemove="dotHover(event)" onmouseleave="hideTip()">${s}</svg>`;
+}
+
+function clusterLabels(pitches, types, xk, yk, X, Y, scale = 1){
+  const labs = types.map(t => { const ps = pitches.filter(p => p.pitch_type === t && p[xk] != null);
+    return ps.length ? {t, x: X(mean(ps.map(p => p[xk]*scale))), y: Y(mean(ps.map(p => p[yk]*scale)))} : null; })
+    .filter(Boolean).sort((a, b) => a.y - b.y);
+  // nudge down any label that would sit on one already placed (clusters often overlap)
+  labs.forEach((a, i) => { for(const b of labs.slice(0, i))
+    if(Math.abs(a.x - b.x) < 38 && Math.abs(a.y - b.y) < 18) a.y = b.y + 18; });
+  return labs.map(({t, x, y}) => `<rect x="${x-17}" y="${y-9}" width="34" height="16" rx="4" fill="var(--card)" stroke="${ptColor(t)}" stroke-width="1.5"/>
+      <text x="${x}" y="${y+3}" text-anchor="middle" style="fill:var(--line);font-weight:700">${t}</text>`).join("");
+}
+
+function movementPlot(pitches, types){
+  const W = 460, H = 420;
+  const {X, Y, g} = axes({W, H, L:40, R:14, T:12, B:34, x0:-25, x1:25, y0:-25, y1:25,
+    xt: [-20, -10, 0, 10, 20], yt: [-20, -10, 0, 10, 20], xl: "horizontal break, in (catcher's view)", yl: "induced vertical break, in"});
+  let s = g + `<line x1="${X(0)}" x2="${X(0)}" y1="12" y2="${H-34}" stroke="var(--axis)"/>
+    <line x1="40" x2="${W-14}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--axis)"/>`;
+  pitches.forEach((p, i) => { if(p.pfx_x == null) return;
+    s += `<circle data-i="${i}" cx="${X(p.pfx_x*12).toFixed(1)}" cy="${Y(p.pfx_z*12).toFixed(1)}" r="3"
+      fill="${ptColor(p.pitch_type)}" fill-opacity=".5"/>`; });
+  s += clusterLabels(pitches, types, "pfx_x", "pfx_z", X, Y, 12);
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Pitch movement" onmousemove="dotHover(event)" onmouseleave="hideTip()">${s}</svg>`;
+}
+
+function releasePlot(pitches, types){
+  const W = 460, H = 380, xs = pitches.map(p => p.release_pos_x).filter(v => v != null);
+  const zs = pitches.map(p => p.release_pos_z).filter(v => v != null);
+  const cx = mean(xs), cz = mean(zs);
+  const {X, Y, g} = axes({W, H, L:40, R:14, T:12, B:34, x0: cx-1.5, x1: cx+1.5, y0: cz-1.2, y1: cz+1.2,
+    xt: ticks(cx-1.5, cx+1.5, .5), yt: ticks(cz-1.2, cz+1.2, .5), xl: "release side, ft (catcher's view)", yl: "release height, ft"});
+  let s = g;
+  pitches.forEach((p, i) => { if(p.release_pos_x == null) return;
+    s += `<circle data-i="${i}" cx="${X(p.release_pos_x).toFixed(1)}" cy="${Y(p.release_pos_z).toFixed(1)}" r="3"
+      fill="${ptColor(p.pitch_type)}" fill-opacity=".5"/>`; });
+  const spread = `${fmt(sd(xs)*12)}" side · ${fmt(sd(zs)*12)}" height`;
+  s += `<text x="${W-18}" y="26" text-anchor="end" style="fill:var(--line)">spread (1 SD): ${spread}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Release point" onmousemove="dotHover(event)" onmouseleave="hideTip()">${s}</svg>`;
+}
+
+function spinClock(pitches, types){
+  const S = 420, cx = S/2, cy = S/2, R = 170, maxRpm = 3200, LX = S + 20;
+  const r = rpm => R * Math.min(rpm, maxRpm) / maxRpm;
+  const pos = (axis, rpm) => { const th = ((axis + 180) % 360) * Math.PI / 180;   // clock position, clockwise from 12
+    return [cx + r(rpm)*Math.sin(th), cy - r(rpm)*Math.cos(th)]; };
+  let g = "";
+  for(const rpm of [1000, 2000, 3000]) g += `<circle cx="${cx}" cy="${cy}" r="${r(rpm)}" fill="none" stroke="var(--grid)" stroke-dasharray="2 4"/>
+    <text x="${cx+4}" y="${cy - r(rpm) + 11}">${rpm}</text>`;
+  for(let h = 1; h <= 12; h++){ const th = h*30*Math.PI/180;
+    g += `<line x1="${cx+(R-6)*Math.sin(th)}" y1="${cy-(R-6)*Math.cos(th)}" x2="${cx+R*Math.sin(th)}" y2="${cy-R*Math.cos(th)}" stroke="var(--axis)"/>
+      <text x="${cx+(R+14)*Math.sin(th)}" y="${cy-(R+14)*Math.cos(th)+4}" text-anchor="middle" style="fill:var(--line)">${h}</text>`; }
+  pitches.forEach((p, i) => { if(p.spin_axis == null || p.release_spin_rate == null) return;
+    const [x, y] = pos(p.spin_axis, p.release_spin_rate);
+    g += `<circle data-i="${i}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="${ptColor(p.pitch_type)}" fill-opacity=".35"/>`; });
+  for(const t of types){ const ps = pitches.filter(p => p.pitch_type === t && p.spin_axis != null && p.release_spin_rate != null);
+    if(!ps.length) continue;
+    const ax = circMean(ps.map(p => p.spin_axis)), rpm = mean(ps.map(p => p.release_spin_rate)), [x, y] = pos(ax, rpm);
+    const k = types.indexOf(t), ly = 40 + k*26;
+    g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ptColor(t)}" stroke-width="2.5"/>
+      <circle cx="${x}" cy="${y}" r="6" fill="${ptColor(t)}" stroke="var(--card)" stroke-width="2"/>
+      <circle cx="${LX+6}" cy="${ly-4}" r="6" fill="${ptColor(t)}"/>
+      <text x="${LX+18}" y="${ly}" style="fill:var(--line);font-weight:700">${t}</text>
+      <text x="${LX+44}" y="${ly}" style="fill:var(--line)">${tilt(ax)} · ${fmt(rpm, 0)} rpm</text>`; }
+  return `<svg viewBox="0 0 ${S + 150} ${S}" aria-label="Spin direction clock" onmousemove="dotHover(event)" onmouseleave="hideTip()">${g}</svg>`;
+}
+
+function veloPlot(pitches, types){
+  const W = 520, rowH = 40, H = 30 + rowH*types.length + 30;
+  const vs = pitches.map(p => p.release_speed).filter(v => v != null);
+  const lo = Math.floor(Math.min(...vs)) - 1, hi = Math.ceil(Math.max(...vs)) + 1;
+  const fb = types.find(t => FASTBALLS.includes(t));
+  const fbV = fb ? mean(pitches.filter(p => p.pitch_type === fb && p.release_speed != null).map(p => p.release_speed)) : null;
+  const L = 44, R = 150, X = v => L + (v-lo)/(hi-lo)*(W-L-R);
+  let s = "";
+  for(const v of ticks(lo, hi, hi-lo > 20 ? 5 : 2)) s += `<line x1="${X(v)}" x2="${X(v)}" y1="20" y2="${H-30}" stroke="var(--grid)"/>
+    <text x="${X(v)}" y="${H-16}" text-anchor="middle">${v}</text>`;
+  s += `<text x="${(L+W-R)/2}" y="${H-2}" text-anchor="middle">release speed, mph</text>`;
+  types.forEach((t, k) => {
+    const yc = 30 + rowH*k + rowH/2;
+    const idx = pitches.map((p, i) => i).filter(i => pitches[i].pitch_type === t && pitches[i].release_speed != null);
+    const ps = idx.map(i => pitches[i]);
+    s += `<text x="${L-8}" y="${yc+3}" text-anchor="end" style="fill:var(--line);font-weight:700">${t}</text>`;
+    idx.forEach((i, j) => { const jit = ((j*7919) % 100)/100 - .5;   // deterministic jitter, same picture every load
+      s += `<circle data-i="${i}" cx="${X(pitches[i].release_speed).toFixed(1)}" cy="${(yc + jit*rowH*.6).toFixed(1)}" r="2.6"
+        fill="${ptColor(t)}" fill-opacity=".45"/>`; });
+    const m = mean(ps.map(p => p.release_speed)), d = fbV != null && t !== fb ? m - fbV : null;
+    s += `<line x1="${X(m)}" x2="${X(m)}" y1="${yc-rowH*.38}" y2="${yc+rowH*.38}" stroke="var(--line)" stroke-width="2.5"/>
+      <text x="${W-R+10}" y="${yc+3}" style="fill:var(--line)">${fmt(m)} mph${d == null ? (t === fb ? " · primary" : "") : ` · ${d > 0 ? "+" : ""}${fmt(d)} vs ${fb}`}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Velocity by pitch type" onmousemove="dotHover(event)" onmouseleave="hideTip()">${s}</svg>`;
+}
+
+function gamePlot(pitches, types){
+  const fb = types.find(t => FASTBALLS.includes(t)) ?? types[0];
+  const byGame = new Map();
+  for(const p of pitches) if(p.pitch_type === fb){ if(!byGame.has(p.game_date)) byGame.set(p.game_date, []); byGame.get(p.game_date).push(p); }
+  const games = [...byGame.entries()].map(([d, ps]) => ({d, n: ps.length,
+    velo: mean(ps.map(p => p.release_speed).filter(v => v != null)), arm: mean(ps.map(p => p.arm_angle).filter(v => v != null))}))
+    .filter(g => g.n >= 5);
+  if(games.length < 3) return `<div class="loading">Fewer than 3 games with 5+ ${fb}s — not enough for a trend.</div>`;
+  // two panels, one shared x (game number): never two y-scales on one axis
+  const W = 520, PH = 150, L = 44, R = 14;
+  const panel = (key, lab, top, unit) => {
+    const v = games.map(g => g[key]).filter(x => x != null);
+    if(!v.length) return `<text x="${L}" y="${top+PH/2}">No ${lab} data</text>`;
+    const lo = Math.min(...v) - 1, hi = Math.max(...v) + 1;
+    const X = i => L + i/(games.length-1)*(W-L-R), Y = x => top + PH - 20 - (x-lo)/(hi-lo)*(PH-34);
+    let s = `<text x="${L}" y="${top+8}" style="fill:var(--line)">${lab}</text>`;
+    for(const t of ticks(lo, hi, hi-lo > 8 ? 2 : 1)) s += `<line x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/>
+      <text x="${L-6}" y="${Y(t)+3}" text-anchor="end">${t}</text>`;
+    const pts = games.map((g, i) => g[key] == null ? null : [X(i), Y(g[key]), g]).filter(Boolean);
+    s += `<polyline points="${pts.map(p => p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}" fill="none" stroke="${ptColor(fb)}" stroke-width="2"/>`;
+    s += pts.map(([x, y, g]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${ptColor(fb)}" stroke="var(--card)" stroke-width="1.5"
+      onmousemove="showTip(event,'<div class=t>${g.d}</div>${fb}: ${fmt(g[key])}${unit} · ${g.n} pitches')" onmouseleave="hideTip()"/>`).join("");
+    return s;
+  };
+  const H = PH*2 + 30;
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Fastball velo and arm angle by game">
+    ${panel("velo", `${fb} velo, mph`, 0, " mph")}${panel("arm", `${fb} arm angle, °`, PH, "°")}
+    <text x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">games, in order (${games.length})</text></svg>`;
+}
+
+function usagePlot(pitches, types){
+  const groups = [
+    ["All pitches", () => true], ["vs left-handed hitters", p => p.stand === "L"], ["vs right-handed hitters", p => p.stand === "R"],
+    ["First pitch", p => p.balls === 0 && p.strikes === 0], ["Ahead", p => p.strikes > p.balls],
+    ["Behind", p => p.balls > p.strikes], ["Two strikes", p => p.strikes === 2],
+  ];
+  const W = 880, rowH = 30, L = 170, R = 60, H = 10 + rowH*groups.length;
+  let s = "";
+  groups.forEach(([lab, f], k) => {
+    const ps = pitches.filter(f), y = 10 + rowH*k;
+    s += `<text x="${L-10}" y="${y+15}" text-anchor="end" style="fill:var(--line)">${lab}</text>
+      <text x="${W-R+8}" y="${y+15}">${ps.length}</text>`;
+    let x = L;
+    for(const t of types){
+      const share = ps.length ? ps.filter(p => p.pitch_type === t).length / ps.length : 0;
+      const w = share*(W-L-R);
+      if(w < .5) continue;
+      s += `<rect x="${x.toFixed(1)}" y="${y+3}" width="${Math.max(w-2, .5).toFixed(1)}" height="${rowH-8}" rx="3" fill="${ptColor(t)}"
+        onmousemove="showTip(event,'<div class=t>${lab}</div>${ptName(t)}: <b>${Math.round(share*100)}%</b>')" onmouseleave="hideTip()"/>`;
+      if(w > 34) s += `<text x="${(x + w/2 - 1).toFixed(1)}" y="${y+16}" text-anchor="middle" style="fill:#fff;font-weight:700">${Math.round(share*100)}%</text>`;
+      x += w;
+    }
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" aria-label="Pitch mix by situation">${s}</svg>`;
+}
+</script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-WMVWTJ7M4X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-WMVWTJ7M4X');
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('a, button, [role=button], [data-track]');
+    if (!el) return;
+    // gtag appends _gl (client id) to cross-subdomain links on click; drop it so href groups.
+    var href;
+    if (el.tagName === 'A') { var u = new URL(el.href); u.searchParams.delete('_gl'); href = u.toString(); }
+    gtag('event', 'click_through', {
+      label: el.dataset.track || el.getAttribute('aria-label') || (el.textContent || '').trim().slice(0, 60) || '(unlabeled)',
+      element: el.tagName.toLowerCase(),
+      href: href,
+      dest_host: href ? new URL(href).hostname : undefined,
+      page_path: location.pathname,
+      page_host: location.hostname
+    });
+  }, true);
+</script>
+</body>
+</html>

@@ -178,6 +178,22 @@ Caveat on the 2020 test season: 2020 was a 60-game COVID season (no fans, univer
 
 Manual steps (user): apply `0011_pitch_arsenal.sql` in the SQL editor; create a public Storage bucket `statcast`.
 
+## Pitcher Perfect (live site page)
+
+`site/baseball.html`, linked from the Baseball button in the landing page's sport switcher. URL state: `?p=<MLBAM id>&s=<season>`; defaults to Paul Skenes.
+
+| Part | Source | Load |
+|---|---|---|
+| Search, arsenal table, velo by season | `pitch_arsenal` via `hub()` (publishable key) | instant |
+| Pitcher percentile radar | `pitch_arsenal`, whole season as the pool (pitchers with 300+ pitches) | instant |
+| K-zone, movement, release point, spin clock, velo + d_velo, arm angle and velo by game, pitch mix by situation | Baseball Savant `statcast_search/csv`, fetched live in the browser | ~5 s per pitcher-season |
+
+- Savant serves the CSV with `access-control-allow-origin: *`, so there is no proxy, no export and no Storage cost. If Savant is down, the database sections still render and the live section shows a retry message.
+- The radar axes all point "higher is better": fastball velo, ride and spin; extension; best secondary whiff; overall whiff; arsenal depth. Arm angle and release height are style, so they get their own charts.
+- Pitch-type colors were validated against the dark panel (`--card #0f4a36`) with the dataviz validator: FF `#ef5d51`, SL `#4f93ec`, SI `#d47a14`, ST `#9f7bee`, FC `#b08f18`, CU/KC `#16a0a8`, CH `#74a42a`, FS `#dc60a8`.
+- `pitch_arsenal` stores left-handers mirrored, so the page un-mirrors `spin_axis` before showing tilt. Live Savant data is raw.
+- Stuff+ is not on the page until it beats CSW%.
+
 ## Open questions
 
 - Bat-tracking project layout: `bat-tracking/` exists, empty until pitch-quality is done.
