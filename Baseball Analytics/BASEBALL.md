@@ -167,11 +167,14 @@ Scrutiny result (analyst review 2, same day): **the baseline model does not beat
 CSW% carries location and command through called strikes; this model is physics only. Stuff is stable early (V4), but stable is not the same as predictive.
 
 Next phase, in order:
-1. Stuff + CSW% blend weighted by sample size.
-2. Location + count Pitching+ variant, the like-for-like comparison with CSW%.
-3. Shrinkage: pitcher-level Stuff over-predicts the top decile (1.22 vs 0.88 xrv per 100).
-4. Per-pitch-type models; merge slider and sweeper into one family (sweeper share went 2.3% in 2021 to 8.3% in 2026).
-5. Stuff+ columns to `pitch_arsenal` (migration 0012), only after 1-2 show it adds signal.
+1. Fix the scoring target. Next-season RV/100 per pitcher-pitch type has only 0.20 split-half reliability at 400 pitches, so any forecast's r is capped near sqrt(0.2) ≈ 0.45 and every result looks small. Add pitcher-level next-season K% and BB% (from the stored `events` column) as forecast targets alongside RV/100. They are less noisy and are what front offices act on.
+2. Stuff + CSW% blend weighted by sample size.
+3. Location + count Pitching+ variant, the like-for-like comparison with CSW%.
+4. Shrinkage: pitcher-level Stuff over-predicts the top decile (1.22 vs 0.88 xrv per 100).
+5. Per-pitch-type models; merge slider and sweeper into one family (sweeper share went 2.3% in 2021 to 8.3% in 2026).
+6. Stuff+ columns to `pitch_arsenal` (migration 0012), only after 2-3 show it adds signal.
+
+Caveat on the 2020 test season: 2020 was a 60-game COVID season (no fans, universal DH, 7-inning doubleheaders, runner on second in extras). Its score only answers "does the model cope with missing arm angle"; never quote it as overall model quality.
 
 Manual steps (user): apply `0011_pitch_arsenal.sql` in the SQL editor; create a public Storage bucket `statcast`.
 
