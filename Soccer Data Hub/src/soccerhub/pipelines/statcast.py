@@ -19,6 +19,9 @@ from soccerhub.pipelines.supa import retry, upsert_df
 SEASONS = range(2020, 2027)  # Hawk-Eye era: spin_axis and arm_angle are reliable from 2020
 BUCKET = "statcast"  # public Supabase Storage bucket, created by hand in the dashboard
 MIN_PITCHES = 25  # per season x pitcher x pitch_type row in pitch_arsenal
+# whiff_pct is null below this: split-half reliability reaches 0.5 at ~50 pitches (notebook chart V4).
+# rv_per_100 is never reliable within a season (0.2 at 400 pitches), so it stays as "results", not skill.
+MIN_PITCHES_RV = 50
 KEY = ["game_pk", "at_bat_number", "pitch_number"]
 COLS = KEY + [
     "game_date", "pitcher", "batter", "player_name", "p_throws", "stand", "balls", "strikes",
@@ -87,7 +90,7 @@ def arsenal(df: pd.DataFrame, season: int) -> pd.DataFrame:
     out["usage_pct"] = out.n / out.groupby("pitcher").n.transform("sum")
     out["ivb_in"], out["hb_arm_in"] = out.pfx_z * 12, -out.pfx_x * 12  # feet -> inches, + = arm side
     out["rv_per_100"] = out.rv * 100  # + = good for the pitcher
-    out["whiff_pct"] = out.whiffs / out.swings.where(out.swings > 0)
+    out["whiff_pct"] = (out.whiffs / out.swings.where(out.swings > 0)).where(out.n >= MIN_PITCHES_RV)
     out["season"] = season
     out = out[out.n >= MIN_PITCHES]
     cols = ["season", "pitcher", "pitch_type", "pitcher_name", "p_throws", "n", "usage_pct", "velo", "spin",

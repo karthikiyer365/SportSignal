@@ -43,17 +43,18 @@ def test_load_season_keeps_regular_season_and_dedupes(monkeypatch):
 
 
 def test_arsenal_cut_sign_usage_and_axis():
-    ff = _pitches(30, description=["swinging_strike"] * 10 + ["foul"] * 10 + ["ball"] * 10,
-                  spin_axis=[350.0] * 15 + [10.0] * 15)
-    sl = _pitches(70, pitch_type="SL", delta_run_exp=-0.02)
+    ff = _pitches(60, description=["swinging_strike"] * 20 + ["foul"] * 20 + ["ball"] * 20,
+                  spin_axis=[350.0] * 30 + [10.0] * 30)
+    sl = _pitches(30, pitch_type="SL", delta_run_exp=-0.02, description="swinging_strike")
     cu = _pitches(5, pitch_type="CU")  # under MIN_PITCHES -> dropped
     out = sc.arsenal(pd.concat([ff, sl, cu], ignore_index=True), 2025).set_index("pitch_type")
 
     assert set(out.index) == {"FF", "SL"}
     assert out.loc["FF", "rv_per_100"] == pytest.approx(-5.0)  # batter gained runs -> bad for pitcher
     assert out.loc["SL", "rv_per_100"] == pytest.approx(2.0)
-    assert out.loc["FF", "usage_pct"] == pytest.approx(30 / 105)  # usage counts the cut CU too
+    assert out.loc["FF", "usage_pct"] == pytest.approx(60 / 95)  # usage counts the cut CU too
     assert out.loc["FF", "whiff_pct"] == pytest.approx(0.5)
+    assert np.isnan(out.loc["SL", "whiff_pct"])  # 30 pitches < MIN_PITCHES_RV: too noisy to show
     assert out.loc["FF", "spin_axis"] == pytest.approx(0.0, abs=1e-6) or out.loc["FF", "spin_axis"] == pytest.approx(360.0)
     assert out.loc["FF", "hb_arm_in"] == pytest.approx(6.0)
 

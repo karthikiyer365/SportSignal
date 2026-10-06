@@ -143,6 +143,36 @@ Decisions:
 - `xwobacon` is xwOBA on contact only (`estimated_woba_using_speedangle` exists only for batted balls).
 - pybaseball's own cache stays off; `cached_fetch` is the only cache, which avoids the two-cache stale-data trap.
 
+Model decisions (analyst review, 2026-10-05), validated by the notebook's charts V1-V7:
+
+| Decision | Choice | Evidence |
+|---|---|---|
+| Target | `xrv`: balls in play valued by their xwOBA bin, everything else actual `-delta_run_exp` | Tied 2-2 with actual rv over four season-pair forecasts (mean diff +0.009). Kept for theory: strips defense and luck. |
+| Split | Train 2021-24, validate 2025, test 2026, plus 2020 as an extra test season | 2020 per-pitch R² 0.00278 with arm angle vs 0.00271 without; missing arm angle barely hurts |
+| Stuff+ scale | `stuff_plus` (one scale, all pitches) and `stuff_plus_type` (within pitch type) | Pitch-mix questions need one scale; "best changeup" needs within-type |
+| Site skill number | Stuff+ planned, on hold until it beats CSW% (see scrutiny result below) | Actual RV/100 is 0.20 at 400 pitches, so it's shown as "results", not skill |
+| Site cutoff | `MIN_PITCHES_RV = 50` gates `whiff_pct` | Whiff split-half reaches 0.5 at 50 pitches |
+| Explainability | xgboost `pred_contribs` (exact TreeSHAP) instead of the shap package | shap 0.49 can't read xgboost 3.x models; avoids a numpy-2 dependency that breaks socceraction |
+
+Scrutiny result (analyst review 2, same day): **the baseline model does not beat CSW%.**
+
+| Test | Stuff (XGBoost xrv) | CSW% |
+|---|---|---|
+| 2025 -> 2026 RV/100 (V3) | 0.184 | 0.186 (diff -0.002, 95% CI -0.066 to +0.061) |
+| First 25 pitches of 2026 -> rest of season (V8) | 0.118 | 0.133 |
+| First 50 | 0.118 | 0.168 |
+| First 100 | 0.169 | 0.178 |
+| First 200 | 0.133 | 0.200 |
+
+CSW% carries location and command through called strikes; this model is physics only. Stuff is stable early (V4), but stable is not the same as predictive.
+
+Next phase, in order:
+1. Stuff + CSW% blend weighted by sample size.
+2. Location + count Pitching+ variant, the like-for-like comparison with CSW%.
+3. Shrinkage: pitcher-level Stuff over-predicts the top decile (1.22 vs 0.88 xrv per 100).
+4. Per-pitch-type models; merge slider and sweeper into one family (sweeper share went 2.3% in 2021 to 8.3% in 2026).
+5. Stuff+ columns to `pitch_arsenal` (migration 0012), only after 1-2 show it adds signal.
+
 Manual steps (user): apply `0011_pitch_arsenal.sql` in the SQL editor; create a public Storage bucket `statcast`.
 
 ## Open questions
