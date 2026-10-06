@@ -1,5 +1,6 @@
 """Upsert pipeline outputs into Supabase Postgres (service role, RLS bypassed)."""
 import os
+import time
 
 import pandas as pd
 from supabase import create_client
@@ -30,7 +31,17 @@ def upsert_df(df: pd.DataFrame, table: str, on_conflict: str) -> int:
                 df[col] = df[col].astype("Int64")
     records = df.astype(object).where(pd.notna(df), None).to_dict("records")
     for i in range(0, len(records), CHUNK):
-        client.table(table).upsert(
-            records[i : i + CHUNK], on_conflict=on_conflict
-        ).execute()
+        chunk = records[i : i + CHUNK]
+        retry(lambda: client.table(table).upsert(chunk, on_conflict=on_conflict).execute())
     return len(records)
+
+
+def retry(fn, attempts: int = 3):
+    """A TLS blip over hundreds of sequential calls must not end the run. Upserts are idempotent."""
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception:  # ponytail: retries every error; a real 403 just fails 3 times, then raises
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 ** attempt)
