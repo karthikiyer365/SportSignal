@@ -23,12 +23,6 @@
        padding:6px 14px;border-radius:999px;cursor:pointer}
   .sports button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);font-weight:650}
   .sports button[disabled]{opacity:.4;cursor:not-allowed}
-  .srch{width:260px;padding:9px 15px;border-radius:999px;border:1px solid var(--rule);
-       background:var(--field);color:var(--ink);font:inherit;font-size:13.5px;margin:0}
-  .srch::placeholder{color:var(--kick)}
-  .btn{display:inline-block;padding:12px 22px;border-radius:999px;background:var(--accent);
-       color:var(--on-accent);font-weight:650;font-size:14.5px;box-shadow:var(--shadow-sm)}
-  .btn.ghost{background:none;border:1px solid var(--rule);color:var(--ink);font-weight:550;box-shadow:none}
 
   /* ---------- hero ---------- */
   .hero{padding:66px 0 54px}
@@ -36,25 +30,9 @@
   .kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--kick);margin:0 0 14px}
   .hero h1{font-size:54px;margin:0 0 16px}
   .hero p.dek{font-size:17.5px;color:var(--soft);margin:0 0 26px;max-width:50ch}
-  .cta{display:flex;gap:10px;flex-wrap:wrap}
   .chartcard{background:var(--panel);border:1px solid var(--rule);border-radius:16px;
        padding:22px;box-shadow:var(--shadow);margin:0}
   .chartcard figcaption{margin-top:14px;font-size:12.5px;color:var(--soft)}
-
-  .spark path.l{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round;
-       stroke-linejoin:round;stroke-dasharray:1000;stroke-dashoffset:1000;
-       animation:draw 2.2s cubic-bezier(.4,0,.2,1) forwards}
-  .spark path.a{fill:var(--accent);opacity:.09}
-  .spark rect{fill:#d3efe3;animation:rise .7s cubic-bezier(.2,.8,.2,1) backwards;
-       transform-box:fill-box;transform-origin:50% 100%}
-  .spark circle.run{fill:var(--amber-fill);stroke:#fff;stroke-width:2}
-  @keyframes draw{to{stroke-dashoffset:0}}
-  @keyframes rise{from{transform:scaleY(0)}}
-  @media(prefers-reduced-motion:reduce){
-    .spark path.l{animation:none;stroke-dashoffset:0}
-    .spark rect{animation:none}
-    .spark circle.run{display:none}
-  }
 
   /* ---------- stat band ---------- */
   .band{background:var(--band);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
@@ -78,6 +56,27 @@
   .pill.wip{background:var(--soon-bg);color:var(--soft);font-weight:600}
   .card .more{margin-top:14px;font-size:13px;color:var(--accent-deep);font-weight:650}
 
+  /* ---------- sport switch: <body data-sport> shows one set of sections ---------- */
+  body[data-sport="baseball"] .soccer, body:not([data-sport="baseball"]) .baseball{display:none}
+  /* ---------- rotating hero charts (drawn by the script at the bottom) ---------- */
+  .hero-rot svg text{font:10px system-ui;fill:var(--kick)}
+  .hero-rot .gl{stroke:var(--rule)} .hero-rot .gl.z,.hero-rot .pl{stroke:#c9d1d8;stroke-width:1.2}
+  .hero-rot .goalmouth{stroke:var(--ink);stroke-width:3}
+  .shotmap circle.m{fill:#9aa5ae;fill-opacity:.28;stroke:#9aa5ae;stroke-opacity:.6;stroke-width:.8}
+  .shotmap circle.g{fill:#f7b500;stroke:#5a3d00;stroke-width:1.1}
+  .movement circle{fill-opacity:.62}
+  .movement text.lab{fill:var(--ink);font-weight:750;font-size:11px;paint-order:stroke;stroke:#fff;
+       stroke-width:3.5px;stroke-linejoin:round}
+  /* one player = 2.5 s in, 1 s held, 2.5 s out. Reduce Motion fades the dot layer; otherwise dots glide */
+  .hero-rot svg > g{transition:opacity 2.5s ease-in-out}
+  .movement .labs{transition:opacity .6s}
+  @media(prefers-reduced-motion:reduce){ .movement .labs{transition-duration:2.5s} }
+  .hero-rot .who{font-weight:700;color:var(--ink)}
+  .picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .picks button{border:1px solid var(--rule);background:#fff;color:var(--soft);border-radius:999px;
+       padding:3px 10px;font:inherit;font-size:11.5px;cursor:pointer}
+  .picks button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+
   footer{border-top:1px solid var(--rule);background:var(--band)}
   footer .wrap{padding-top:30px;padding-bottom:36px;font-size:13px;color:var(--soft)}
   footer a{color:var(--accent-deep);font-weight:600}
@@ -86,67 +85,46 @@
     .hero .wrap{grid-template-columns:1fr;gap:34px}
     .hero h1{font-size:40px}
     .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .srch{display:none}
   }
   @media(max-width:560px){ .grid{grid-template-columns:1fr} .band .wrap{gap:28px} }
 </style>
 </head>
 <body>
+<script>
+  document.body.dataset.sport = new URLSearchParams(location.search).get("sport") === "baseball" ? "baseball" : "soccer";
+</script>
 
 <nav class="nav">
   <div class="wrap">
     <span class="brand"><i></i>SportSignal</span>
     <div class="sports" role="group" aria-label="Sport">
-      <button aria-pressed="true">Soccer</button>
-      <button aria-pressed="false" onclick="location.href='baseball.html'">Baseball</button>
+      <button data-sport="soccer" aria-pressed="true">Soccer</button>
+      <button data-sport="baseball" aria-pressed="false">Baseball</button>
       <button disabled title="Data in progress">Basketball</button>
       <button disabled title="Data in progress">Football</button>
       <button disabled title="Data in progress">Cricket</button>
     </div>
-    <form style="margin-left:auto" action="player.html" method="get">
-      <input class="srch" type="search" name="name" placeholder="Search any player…"
-             aria-label="Search any player">
-    </form>
   </div>
 </nav>
 
-<section class="hero">
+<section class="hero soccer">
   <div class="wrap">
     <div>
       <p class="kicker">Soccer · Europe's big five · 2008&ndash;2025</p>
       <h1 class="disp">Every number, one page per player</h1>
       <p class="dek">Shot maps, peer percentiles and market value against the age curve —
         eighteen seasons cross-matched into one open database.</p>
-      <div class="cta">
-        <a class="btn" href="player.html">Open the dashboard</a>
-        <a class="btn ghost" href="match.html">Match Center</a>
-      </div>
     </div>
 
-    <figure class="chartcard">
-      <svg class="spark" viewBox="0 0 420 200" style="width:100%;height:auto;display:block"
-           aria-label="Non-penalty goals against the expected goals those chances were worth, by season">
-        <rect x="18"  y="126" width="30" height="58"  rx="4" style="animation-delay:.05s"/>
-        <rect x="66"  y="104" width="30" height="80"  rx="4" style="animation-delay:.12s"/>
-        <rect x="114" y="118" width="30" height="66"  rx="4" style="animation-delay:.19s"/>
-        <rect x="162" y="80"  width="30" height="104" rx="4" style="animation-delay:.26s"/>
-        <rect x="210" y="58"  width="30" height="126" rx="4" style="animation-delay:.33s"/>
-        <rect x="258" y="92"  width="30" height="92"  rx="4" style="animation-delay:.40s"/>
-        <rect x="306" y="66"  width="30" height="118" rx="4" style="animation-delay:.47s"/>
-        <rect x="354" y="46"  width="30" height="138" rx="4" style="animation-delay:.54s"/>
-        <path class="a" d="M33 112 L81 92 L129 100 L177 66 L225 44 L273 74 L321 52 L369 30 L369 184 L33 184 Z"/>
-        <path class="l" id="spk" d="M33 112 L81 92 L129 100 L177 66 L225 44 L273 74 L321 52 L369 30"/>
-        <circle class="run" r="5.5">
-          <animateMotion dur="2.2s" fill="freeze" begin="0s"><mpath href="#spk"/></animateMotion>
-        </circle>
-      </svg>
-      <figcaption>Non-penalty goals (bars) against the expected goals those chances were
-        worth (line). The gap is the finishing.</figcaption>
+    <figure class="chartcard hero-rot" data-hero="soccer">
+      <svg class="shotmap" style="width:100%;height:auto;display:block" role="img"></svg>
+      <figcaption><span class="who"></span> Every shot since 2014: dot size is the chance's xG, amber is a goal.
+        <span class="picks" role="group" aria-label="Choose the example"></span></figcaption>
     </figure>
   </div>
 </section>
 
-<section class="band">
+<section class="band soccer">
   <div class="wrap nums">
     <div><b>49,692</b><span>Player-seasons</span></div>
     <div><b>542,481</b><span>Shots</span></div>
@@ -157,7 +135,7 @@
   </div>
 </section>
 
-<section class="surfaces">
+<section class="surfaces soccer">
   <div class="wrap">
     <p class="kicker" style="margin-bottom:6px">Analysis surfaces</p>
     <h2 class="disp" style="font-size:26px;margin:0">Soccer</h2>
@@ -196,7 +174,7 @@
   </div>
 </section>
 
-<footer>
+<footer class="soccer">
   <div class="wrap">
     Data: FBref · StatsBomb open data · Understat · Transfermarkt (via
     <a href="https://github.com/dcaribou/transfermarkt-datasets">transfermarkt-datasets</a>)
@@ -204,6 +182,253 @@
   </div>
 </footer>
 
+
+<section class="hero baseball">
+  <div class="wrap">
+    <div>
+      <p class="kicker">Baseball · MLB · Statcast · 2020&ndash;2026</p>
+      <h1 class="disp">Every pitch, every pitcher</h1>
+      <p class="dek">Arsenal, movement, release and spin for every MLB pitcher —
+        4.5 million Statcast pitches, with the charts pulled live for the pitcher you pick.</p>
+    </div>
+
+    <figure class="chartcard hero-rot" data-hero="baseball">
+      <svg class="movement" style="width:100%;height:auto;display:block" role="img"></svg>
+      <figcaption><span class="who"></span> Each dot is a real pitch, placed by how much it rides (up) and breaks sideways, in inches.
+        <span class="picks" role="group" aria-label="Choose the example"></span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="band baseball">
+  <div class="wrap nums">
+    <div><b>4,548,695</b><span>Pitches</span></div>
+    <div><b>2,014</b><span>Pitchers</span></div>
+    <div><b>15,475</b><span>Games</span></div>
+    <div><b>7</b><span>Seasons</span></div>
+    <p class="note">Statcast pitch tracking from Baseball Savant, regular season 2020&ndash;2026.</p>
+  </div>
+</section>
+
+<section class="surfaces baseball">
+  <div class="wrap">
+    <p class="kicker" style="margin-bottom:6px">Analysis surfaces</p>
+    <h2 class="disp" style="font-size:26px;margin:0">Baseball</h2>
+    <div class="grid">
+
+      <a class="card" href="baseball.html">
+        <span class="pill">Live</span>
+        <h3>Pitcher Perfect</h3>
+        <p>One page per pitcher: arsenal, pitch location, movement, release point, spin
+           direction and a percentile profile against the league.</p>
+        <div class="more">Open &rarr;</div>
+      </a>
+
+      <div class="card soon">
+        <span class="pill wip">In progress</span>
+        <h3>Bat Tracking</h3>
+        <p>Swing speed, swing length and attack angle: which swings do damage, and which miss.</p>
+      </div>
+
+      <div class="card soon">
+        <span class="pill wip">In progress</span>
+        <h3>Stuff+ / Pitching+</h3>
+        <p>A pitch-quality model graded on physics, then on location and count.</p>
+      </div>
+
+      <div class="card soon">
+        <span class="pill wip">In progress</span>
+        <h3>Hitter Analysis</h3>
+        <p>Plate discipline, contact quality and expected stats for every MLB hitter.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer class="baseball">
+  <div class="wrap">
+    Data: Baseball Savant / Statcast (MLB Advanced Media), via
+    <a href="https://github.com/jldbc/pybaseball">pybaseball</a> — pitch-level charts load live from Savant.
+  </div>
+</footer>
+
+<script>
+  // Sport switch: swap sections in place, keep the choice in the URL so links and Back work.
+  function setSport(sport){
+    document.body.dataset.sport = sport;
+    document.querySelectorAll(".sports button[data-sport]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sport === sport));
+    document.title = sport === "baseball" ? "SportSignal — baseball analytics" : "SportSignal — sports analytics";
+  }
+  document.querySelector(".sports").addEventListener("click", e => {
+    const sport = e.target.closest("button[data-sport]")?.dataset.sport;
+    if(!sport || sport === document.body.dataset.sport) return;
+    const u = new URL(location);
+    if(sport === "baseball") u.searchParams.set("sport", "baseball"); else u.searchParams.delete("sport");
+    history.pushState({}, "", u);
+    setSport(sport);
+  });
+  addEventListener("popstate", () => setSport(new URLSearchParams(location.search).get("sport") === "baseball" ? "baseball" : "soccer"));
+  setSport(document.body.dataset.sport);
+</script>
+
+<script>
+/* ---------- rotating hero charts ----------
+   data/hero.json is built by Soccer Data Hub/scripts/build_hero.py. Every example is drawn into the
+   same fixed pool of SVG circles, so switching examples moves each dot to its new spot instead of
+   redrawing: shots glide between players, pitches of one type glide between pitchers. */
+// Every 6 s a new example: 5 s of change, then 1 s held still.
+// Reduce Motion: 2.5 s fade out + 2.5 s fade in. Otherwise: dots glide for the same 5 s.
+const HERO_MS = 6000, TRANS_MS = 5000, HALF_MS = TRANS_MS / 2;
+const GLIDE = .75, SPREAD = .25;   // each dot glides 3.75 s; dot starts are spread over 1.25 s
+const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NS = "http://www.w3.org/2000/svg";
+const ease = t => t < .5 ? 4*t*t*t : 1 - (-2*t + 2)**3 / 2;
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]); parent?.appendChild(e); return e; };
+
+// soccer: player.html's shot-map geometry (Understat coords, goal at the top)
+const SM = {W:520, H:380, X0:0.6};
+const ppx = ly => 20 + (SM.W - 40) * (1 - ly);
+const ppy = lx => SM.H - 16 - (SM.H - 34) * Math.max(0, (lx - SM.X0) / (1 - SM.X0));
+function shotFrame(svg){
+  svg.setAttribute("viewBox", `0 0 ${SM.W} ${SM.H}`);
+  const g = el("g", {}, svg), L = (x1, y1, x2, y2) => el("line", {class:"pl", x1:ppx(y1), y1:ppy(x1), x2:ppx(y2), y2:ppy(x2)}, g);
+  const bx = 1-16.5/105, sx = 1-5.5/105, b0 = .5-20.16/68, b1 = .5+20.16/68, s0 = .5-9.16/68, s1 = .5+9.16/68;
+  L(1,0,1,1); L(SM.X0,0,SM.X0,1); L(SM.X0,0,1,0); L(SM.X0,1,1,1);
+  L(bx,b0,bx,b1); L(bx,b0,1,b0); L(bx,b1,1,b1); L(sx,s0,sx,s1); L(sx,s0,1,s0); L(sx,s1,1,s1);
+  el("line", {class:"goalmouth", x1:ppx(.5-3.66/68), y1:ppy(1)-2, x2:ppx(.5+3.66/68), y2:ppy(1)-2}, g);
+  el("circle", {cx:ppx(.5), cy:ppy(1-11/105), r:1.8, fill:"#c9d1d8"}, g);
+}
+// misses (small xG first) fill the front of the pool, goals the back, so goals always draw on top
+function shotTargets(p, pool){
+  const miss = p.shots.filter(s => !s[3]).sort((a, b) => a[2] - b[2]);
+  const goal = p.shots.filter(s => s[3]).sort((a, b) => a[2] - b[2]);
+  const dot = s => ({x: ppx(s[1]), y: ppy(s[0]), r: 1.8 + Math.sqrt(Math.max(s[2], 0)) * 9, cls: s[3] ? "g" : "m"});
+  return [...miss.map(dot), ...Array(pool - p.shots.length).fill(null), ...goal.map(dot)];
+}
+const shotCaption = p => { const g = p.shots.filter(s => s[3]).length, xg = p.shots.reduce((a, s) => a + s[2], 0);
+  return `${p.name}: ${p.shots.length.toLocaleString("en")} shots, ${g} goals, ${xg.toFixed(1)} xG.`; };
+
+// baseball: movement plot, catcher's view; one fixed block of slots per pitch type
+const MV = {W:420, H:250, L:30, R:12, T:10, B:26, x0:-26, x1:22, y0:-14, y1:24};
+const mx = v => MV.L + (v - MV.x0) / (MV.x1 - MV.x0) * (MV.W - MV.L - MV.R);
+const my = v => MV.H - MV.B - (v - MV.y0) / (MV.y1 - MV.y0) * (MV.H - MV.T - MV.B);
+const PT_ORDER = ["FF","SI","FC","SL","ST","CU","KC","CH","FS"], PER_TYPE = 26;
+const PT_COLOR = {FF:"#ef5d51", SI:"#d47a14", FC:"#b08f18", SL:"#4f93ec", ST:"#9f7bee", CU:"#16a0a8", KC:"#16a0a8", CH:"#74a42a", FS:"#dc60a8"};
+function moveFrame(svg){
+  svg.setAttribute("viewBox", `0 0 ${MV.W} ${MV.H}`);
+  const g = el("g", {}, svg);
+  for(const v of [-20, -10, 0, 10, 20]){
+    el("line", {class: v ? "gl" : "gl z", x1:mx(v), x2:mx(v), y1:MV.T, y2:MV.H - MV.B}, g);
+    el("text", {x:mx(v), y:MV.H - MV.B + 13, "text-anchor":"middle"}, g).textContent = v;
+  }
+  for(const v of [-10, 0, 10, 20]){
+    el("line", {class: v ? "gl" : "gl z", x1:MV.L, x2:MV.W - MV.R, y1:my(v), y2:my(v)}, g);
+    el("text", {x:MV.L - 5, y:my(v) + 3, "text-anchor":"end"}, g).textContent = v;
+  }
+}
+function moveTargets(p, pool){
+  const out = Array(pool).fill(null);
+  PT_ORDER.forEach((t, k) => (p.types[t] ?? []).forEach((pt, j) =>
+    out[k*PER_TYPE + j] = {x: mx(pt[0]), y: my(pt[1]), r: 3.4, fill: PT_COLOR[t]}));
+  return out;
+}
+function moveLabels(svg, p, showAfter){   // centroid labels, nudged apart when two clusters overlap
+  svg.querySelectorAll(".labs").forEach(old => { old.style.opacity = 0; setTimeout(() => old.remove(), HALF_MS); });
+  const g = el("g", {class:"labs", style:"opacity:0"}, svg);
+  const labs = Object.entries(p.types).map(([t, pts]) => ({t,
+    x: mx(pts.reduce((a, q) => a + q[0], 0) / pts.length), y: my(pts.reduce((a, q) => a + q[1], 0) / pts.length) - 12}))
+    .sort((a, b) => a.y - b.y);
+  labs.forEach((a, i) => { for(const b of labs.slice(0, i)) if(Math.abs(a.x - b.x) < 26 && Math.abs(a.y - b.y) < 14) a.y = b.y + 14; });
+  for(const l of labs) el("text", {class:"lab", x:l.x, y:l.y, "text-anchor":"middle"}, g).textContent = l.t;
+  setTimeout(() => requestAnimationFrame(() => g.style.opacity = 1), showAfter);
+}
+const moveCaption = p => `${p.name}, ${p.season}:`;
+
+function setupHero(fig, examples, frame, targets, caption, poolOf, extra){
+  const svg = fig.querySelector("svg"), who = fig.querySelector(".who"), picks = fig.querySelector(".picks");
+  frame(svg);
+  const pool = Math.max(...examples.map(poolOf));   // one circle per dot of the busiest example
+  const dotsG = el("g", {}, svg);
+  const dots = Array.from({length: pool}, () => el("circle", {r: 0}, dotsG));
+  let cur = Array(pool).fill(null), idx = -1, timer = null, paused = false, raf = 0, swap = 0;
+
+  examples.forEach((e, i) => { const b = document.createElement("button");
+    b.textContent = e.short; b.dataset.i = i; picks.appendChild(b); });
+  picks.addEventListener("click", e => { const b = e.target.closest("button"); if(b){ show(+b.dataset.i); restart(); } });
+
+  function show(i){
+    idx = i;
+    const next = targets(examples[i], pool), from = cur.map((d, k) => d ?? (next[k] && {...next[k], r: 0}));
+    const to = next.map((d, k) => d ?? (from[k] && {...from[k], r: 0}));
+    const label = labelsAfter => {
+      who.textContent = caption(examples[i]);
+      picks.querySelectorAll("button").forEach((b, k) => b.setAttribute("aria-pressed", k === i));
+      svg.setAttribute("aria-label", caption(examples[i]));
+      extra?.(svg, examples[i], labelsAfter);
+    };
+    cancelAnimationFrame(raf);
+    const t0 = performance.now();
+    const step = now => {
+      let done = true;
+      dots.forEach((c, k) => {
+        const a = from[k], b = to[k]; if(!a || !b) return;
+        // staggered wave: each dot starts a little after the previous one
+        const local = REDUCE ? 1 : Math.min(1, Math.max(0, (now - t0 - (k / pool) * TRANS_MS * SPREAD) / (TRANS_MS * GLIDE)));
+        if(local < 1) done = false;
+        const q = ease(local);
+        c.setAttribute("cx", (a.x + (b.x - a.x) * q).toFixed(1));
+        c.setAttribute("cy", (a.y + (b.y - a.y) * q).toFixed(1));
+        c.setAttribute("r", Math.max(0, a.r + (b.r - a.r) * q).toFixed(2));
+        const look = q < .5 ? a : b;
+        if(look.cls) c.setAttribute("class", look.cls);
+        if(look.fill) c.setAttribute("fill", look.fill);
+      });
+      if(!done) raf = requestAnimationFrame(step);
+    };
+    clearTimeout(swap);
+    if(REDUCE){
+      // fade out 2.5 s (skipped on first load: nothing to fade), swap while invisible, fade in 2.5 s
+      const first = !cur.some(Boolean), outMs = first ? 0 : HALF_MS;
+      dotsG.style.opacity = 0;
+      svg.querySelectorAll(".labs").forEach(l => l.style.opacity = 0);
+      swap = setTimeout(() => { label(0); step(performance.now()); requestAnimationFrame(() => requestAnimationFrame(() => dotsG.style.opacity = 1)); }, outMs);   // 2 frames: let opacity 0 paint first
+    }else{
+      label(TRANS_MS * .7);           // new labels appear as the dots arrive
+      raf = requestAnimationFrame(step);
+    }
+    cur = next;
+  }
+  function restart(){
+    clearInterval(timer);
+    timer = setInterval(() => {
+      if(paused || document.hidden || document.body.dataset.sport !== fig.dataset.hero) return;
+      show((idx + 1) % examples.length);
+    }, HERO_MS);
+  }
+  fig.addEventListener("mouseenter", () => paused = true);
+  fig.addEventListener("mouseleave", () => paused = false);
+  show(0); restart();
+}
+
+fetch("data/hero.json").then(r => r.json()).then(d => {
+  setupHero(document.querySelector('[data-hero="soccer"]'), d.soccer, shotFrame, shotTargets, shotCaption, e => e.shots.length);
+  setupHero(document.querySelector('[data-hero="baseball"]'), d.baseball, moveFrame, moveTargets, moveCaption, () => PT_ORDER.length * PER_TYPE, moveLabels);
+}).catch(() => document.querySelectorAll(".hero-rot .who").forEach(w => w.textContent = "Chart data did not load."));
+
+/* ---------- stat band count-up: runs once per number, when it first scrolls into view ---------- */
+const countUp = new IntersectionObserver(entries => entries.forEach(({isIntersecting, target: b}) => {
+  if(!isIntersecting) return;
+  countUp.unobserve(b);
+  if(REDUCE) return;
+  const end = +b.textContent.replace(/,/g, ""), t0 = performance.now(), MS = 9000;   // ~9 s count-up
+  const tick = now => { const q = (1 - Math.cos(Math.PI * Math.min(1, (now - t0) / MS))) / 2;
+    b.textContent = Math.round(end * q).toLocaleString("en"); if(q < 1) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}), {threshold: .6});
+document.querySelectorAll(".band b").forEach(b => countUp.observe(b));
+</script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-WMVWTJ7M4X"></script>
 <script>
   window.dataLayer = window.dataLayer || [];

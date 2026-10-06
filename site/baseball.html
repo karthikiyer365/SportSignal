@@ -84,7 +84,7 @@
 </head>
 <body>
 <nav class="top">
-  <a class="home disp" href="index.html">SportSignal</a>
+  <a class="home disp" href="index.html?sport=baseball">SportSignal</a>
   <span class="brandsub">⚾ Pitcher Perfect</span>
   <div class="searchwrap">
     <input id="search" type="search" placeholder="Search any MLB pitcher, 2020–2026…"
@@ -231,6 +231,13 @@ async function seasonPool(season){
 load();
 async function load(){
   const main = document.getElementById("main");
+  const q = qs().get("q");              // search handed over from the landing page
+  if(q && !qs().get("p")){
+    const hit = (await hub("pitch_arsenal", {select:"pitcher", pitcher_name:`ilike.*${q}*`, order:"season.desc", limit:"1"}))[0];
+    if(hit){ history.replaceState({}, "", `?p=${hit.pitcher}`); return load(); }
+    main.innerHTML = `<div class="empty"><p class="disp">No pitcher found</p><p>Nothing matches “${esc(q)}”. Try a last name.</p></div>`;
+    return;
+  }
   const pid = qs().get("p");
   if(!pid){ history.replaceState({}, "", `?p=${DEFAULT_PITCHER}`); return load(); }
   try{
