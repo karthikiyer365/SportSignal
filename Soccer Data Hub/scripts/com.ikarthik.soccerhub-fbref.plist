@@ -5,10 +5,10 @@
   These stages cannot run on GitHub Actions: FBref's Cloudflare challenge refuses
   datacenter IPs.
 
-  One league per weekday at 06:00 local, picked by the script from the weekday:
-  Mon=ENG, Tue=ESP, Wed=GER, Thu=ITA, Fri=FRA. All five in one pass trips FBref's
-  per-IP limit (measured 2026-09-29: league 1 took 35 min, league 2 was refused),
-  so each league refreshes weekly instead of the five bursting twice weekly.
+  Fires daily at 06:00 local; the script's SCHEDULE picks the work by weekday:
+  Mon=ENG, Tue=ISL (FotMob, no browser), Wed=ESP, Thu=GER, Fri=ITA, Sat=FRA, Sun=none.
+  All five FBref leagues in one pass trips FBref's per-IP limit (measured 2026-09-29:
+  league 1 took 35 min, league 2 was refused), so each league refreshes weekly.
 
   Install:  cp "Soccer Data Hub/scripts/com.ikarthik.soccerhub-fbref.plist" ~/Library/LaunchAgents/
             launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist
@@ -25,48 +25,13 @@
         <string>/Users/ikarthik/Documents/GitHub/Everything-Football-Soccer/Soccer Data Hub/scripts/refresh_fbref_chain.py</string>
     </array>
     <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Weekday</key>
-            <integer>1</integer>
-            <key>Hour</key>
-            <integer>6</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>2</integer>
-            <key>Hour</key>
-            <integer>6</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>3</integer>
-            <key>Hour</key>
-            <integer>6</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>4</integer>
-            <key>Hour</key>
-            <integer>6</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key>
-            <integer>5</integer>
-            <key>Hour</key>
-            <integer>6</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-    </array>
+    <!-- daily 06:00; refresh_fbref_chain.SCHEDULE picks the league (Sunday = nothing) -->
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

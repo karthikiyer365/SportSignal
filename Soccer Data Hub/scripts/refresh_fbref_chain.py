@@ -4,12 +4,13 @@
 FBref sits behind a Cloudflare interactive challenge. soccerdata clears it with a real
 Chrome (``class FBref(BaseSeleniumReader)``), but only from a residential IP — on a
 GitHub runner the browser starts, burns all five attempts and raises. So every job that
-reads FBref runs here instead, on the twice-weekly schedule launchd owns.
+reads FBref runs here instead. launchd fires daily at 06:00; SCHEDULE decides what runs:
+Mon + Wed-Sat one FBref league each, Tue the ISL (FotMob, plain HTTP), Sun nothing.
 
 The three stages are ordered, not independent: understat and age_curve both update rows
 that run_season writes, so they must follow it in the same pass.
 
-One league per weekday. All five in one pass is 15 challenge-gated FBref fetches, which
+One league per day. All five in one pass is 15 challenge-gated FBref fetches, which
 trips their per-IP limit: measured 2026-09-29, the first league completed in 35 min and
 the second was refused partway with "failed CAPTCHA, IP block or network issues".
 
@@ -24,14 +25,17 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent
-# Order is the schedule: index 0 runs Monday, 4 runs Friday.
-LEAGUES = [
-    "ENG-Premier League",
-    "ESP-La Liga",
-    "GER-Bundesliga",
-    "ITA-Serie A",
-    "FRA-Ligue 1",
-]
+ISL = "IND-Indian Super League"  # == soccerhub.pipelines.ISL_LEAGUE; no package import before load_env
+# date.weekday() -> league. Tuesday is the ISL: FotMob, not the FBref chain.
+SCHEDULE = {
+    0: "ENG-Premier League",
+    1: ISL,
+    2: "ESP-La Liga",
+    3: "GER-Bundesliga",
+    4: "ITA-Serie A",
+    5: "FRA-Ligue 1",
+}
+LEAGUES = [lg for lg in SCHEDULE.values() if lg != ISL]  # FBref chain; --all runs these
 
 
 def leagues_for_today(today: date) -> list[str]:
@@ -40,8 +44,8 @@ def leagues_for_today(today: date) -> list[str]:
         return [os.environ["LEAGUE"]]
     if "--all" in sys.argv:
         return LEAGUES
-    weekday = today.weekday()  # Mon=0
-    return [LEAGUES[weekday]] if weekday < len(LEAGUES) else []
+    league = SCHEDULE.get(today.weekday())  # Mon=0
+    return [league] if league else []
 
 
 def reap_orphan_drivers() -> None:
@@ -84,6 +88,7 @@ def main() -> int:
     from soccerhub import (
         current_season,
         push_age_curve,
+        push_isl_new,
         push_player_xg,
         push_shots,
         push_team_match,
@@ -93,12 +98,20 @@ def main() -> int:
 
     season = os.environ.get("SEASON") or current_season()
     todays = leagues_for_today(date.today())
-    log(f"season {season}, leagues {todays or '(none — weekend)'}"
+    log(f"season {season}, leagues {todays or '(none — Sunday)'}"
         f"{' (dry run)' if dry_run else ''}")
     if dry_run:
         log("OK env + imports fine")
         return 0
     if not todays:
+        return 0
+    if todays == [ISL]:  # no browser, no age_curve (ISL has no market values)
+        try:
+            log(f"isl: {push_isl_new()}")
+        except SoccerhubError as exc:
+            log(f"FAILED isl: {exc}")
+            return 1
+        log("DONE isl clean")
         return 0
 
     atexit.register(reap_orphan_drivers)
