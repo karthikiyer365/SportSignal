@@ -18,6 +18,8 @@ __all__ = [
     "push_matches",
     "push_club_elo",
     "push_club_elo_history",
+    "push_isl",
+    "push_isl_new",
     "push_player_xg",
     "push_shots",
     "push_team_match",
@@ -33,6 +35,8 @@ CLUB_ELO_CONFLICT_KEY = "team,league,snapshot_date"  # matches 0007 PK
 CONFLICT_KEY_PLAYER_SEASON = "league,season,team,player_name"  # matches 0001 PK
 TEAM_MATCH_CONFLICT_KEY = "league,season,game_id"  # matches 0009 PK
 SHOTS_CONFLICT_KEY = "league,season,shot_id"  # matches 0010 PK
+PLAYER_MATCH_CONFLICT_KEY = "league,season,match_id,fotmob_id"  # matches 0012 PK
+ISL_LEAGUE = "IND-Indian Super League"
 BIG5 = {"ENG-Premier League", "ESP-La Liga", "GER-Bundesliga",
         "ITA-Serie A", "FRA-Ligue 1"}
 
@@ -163,3 +167,4 @@ from soccerhub.pipelines.understat import (  # noqa: E402
     push_shots,
     push_team_match,
 )
+from soccerhub.pipelines.fotmob_isl import push_isl, push_isl_new  # noqa: E402

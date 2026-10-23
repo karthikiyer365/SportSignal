@@ -12,7 +12,7 @@ dependencies = [
     "kloppy>=3.15",
     "mcp>=1.2",
     "pandas>=2.0",
-    "pyarrow>=14",
+    "pyarrow>=14,<26",  # pyarrow 26 needs numpy>=2; socceraction 1.5 pins numpy<2
     "supabase>=2",
     "google-genai>=1.9",
     "socceraction>=1.5",

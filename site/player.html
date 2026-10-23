@@ -300,7 +300,7 @@ document.addEventListener("click", e => {
 async function runSearch(q){
   const found = await hub("player_season", {
     select: "player_name,tm_id,team,season,league",
-    player_name: `ilike.*${q}*`, order: "season.desc", limit: "60"});
+    player_name: `ilike.*${q}*`, league: "neq.IND-Indian Super League", order: "season.desc", limit: "60"});
   const seen = new Set(); const picks = [];
   for(const r of found){
     const key = r.tm_id ?? `name:${r.player_name}`;
@@ -403,6 +403,7 @@ async function load(){
   const params = {select: "*", order: "season"};
   if(u.has("tm")) params.tm_id = `eq.${u.get("tm")}`;
   else params.player_name = `eq.${u.get("name")}`;
+  params.league = "neq.IND-Indian Super League";  // ISL is its own page (#31)
 
   try{
     rows = await hub("player_season", params);
@@ -1381,7 +1382,7 @@ const loadShots = once(async () => {
   if(uid == null) return shots = [];
   try{ return shots = await hubAll("shots_understat",
     {select:"season,date,team,xg,location_x,location_y,body_part,situation,result,minute",
-     player_id:`eq.${uid}`, order:"date"}); }
+     player_id:`eq.${uid}`, league: "neq.IND-Indian Super League", order:"date"}); }
   catch{ return shots = []; }      // map degrades to a stated gap
 });
 
