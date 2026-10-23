@@ -58,6 +58,21 @@ def _player_stats(p: dict) -> dict:
     return row
 
 
+def _sider(team_ids: set, home_id: int, away_id: int):
+    """FotMob team id -> is_home. FotMob sometimes tags one side with a junk id (SC Delhi
+    2025: shots -1, players 0); a junk id then means the side whose real id is absent."""
+    present = team_ids & {home_id, away_id}
+    junk_is_home = home_id not in present if len(present) == 1 else None
+
+    def is_home(tid: int) -> bool:
+        if tid in (home_id, away_id):
+            return tid == home_id
+        if junk_is_home is None:
+            raise ValueError(f"can't place FotMob team id {tid} (home {home_id}, away {away_id})")
+        return junk_is_home
+    return is_home
+
+
 def parse_match(raw: dict, season: str) -> dict[str, pd.DataFrame]:
     """One matchDetails payload -> rows for each hub table, keyed and ready to upsert."""
     c = raw["content"]
@@ -101,9 +116,10 @@ def parse_match(raw: dict, season: str) -> dict[str, pd.DataFrame]:
         "home_possession": poss[0], "away_possession": poss[1],
     }])
 
+    shot_home = _sider({s["teamId"] for s in c["shotmap"]["shots"]}, home["id"], away["id"])
     shots = pd.DataFrame([{
         **key, "shot_id": s["id"], "game_id": match_id, "date": date,
-        "team": name.get(s["teamId"]), "player": s["playerName"], "player_id": s["playerId"],
+        "team": hn if shot_home(s["teamId"]) else an, "player": s["playerName"], "player_id": s["playerId"],
         "xg": s.get("expectedGoals"), "xgot": s.get("expectedGoalsOnTarget"),
         # FotMob always draws the shooting team attacking toward x=105
         "location_x": s["x"] / PITCH_X, "location_y": s["y"] / PITCH_Y,
@@ -117,12 +133,12 @@ def parse_match(raw: dict, season: str) -> dict[str, pd.DataFrame]:
     starters = {p["id"] for t in ("homeTeam", "awayTeam") for p in c["lineup"][t]["starters"]}
     cards = pd.DataFrame([(e["player"]["id"], e.get("card")) for e in events
                           if e["type"] == "Card" and e.get("player")], columns=["pid", "card"])
+    played = [(p, st) for p in c["playerStats"].values()
+              if (st := _player_stats(p))["minutes"]]  # drops unused subs (some lack a teamId)
+    player_home = _sider({p["teamId"] for p, _ in played}, home["id"], away["id"])
     rows = []
-    for p in c["playerStats"].values():
-        st = _player_stats(p)
-        if not st["minutes"]:
-            continue  # unused sub
-        is_home = p["teamId"] == home["id"]
+    for p, st in played:
+        is_home = player_home(p["teamId"])
         mine = cards[cards.pid == p["id"]].card
         rows.append({
             **key, "match_id": match_id, "fotmob_id": p["id"], "date": date,

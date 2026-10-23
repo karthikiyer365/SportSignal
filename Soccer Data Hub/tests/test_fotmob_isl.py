@@ -187,3 +187,35 @@ def test_push_isl_new_rebuilds_season_when_nothing_new(wired):
     wired["stored"] = list(wired["finished"])
     push_isl_new()
     assert wired["fetched"] == [] and [t for t, _ in wired["upserts"]] == ["player_season"]
+
+
+def test_broken_team_ids_resolve_to_the_other_side(raw):
+    """FotMob tags SC Delhi 2025 shots teamId=-1 and players teamId=0 (e.g. match 5159578)."""
+    import copy
+
+    from soccerhub.pipelines.fotmob_isl import parse_match
+
+    r = copy.deepcopy(raw)
+    home_id = r["header"]["teams"][0]["id"]               # break the HOME side: worst case for is_home
+    for s in r["content"]["shotmap"]["shots"]:
+        if s["teamId"] == home_id:
+            s["teamId"] = -1
+    for p in r["content"]["playerStats"].values():
+        if p["teamId"] == home_id:
+            p["teamId"] = 0
+    p = parse_match(r, "2024")
+    assert p["shots"].team.notna().all()
+    assert set(p["shots"].team) == {"Mohun Bagan SG", "Mumbai City FC"}
+    pm = p["player_match"]
+    assert (pm[pm.team == "Mohun Bagan SG"].is_home).all() and len(pm[pm.team == "Mohun Bagan SG"]) > 11
+
+
+def test_statless_player_without_team_id_is_skipped(raw):
+    """Match 6361999 lists a player with no teamId and no stats at all."""
+    import copy
+
+    from soccerhub.pipelines.fotmob_isl import parse_match
+
+    r = copy.deepcopy(raw)
+    r["content"]["playerStats"]["1"] = {"name": "Ghost", "id": 1, "isGoalkeeper": False, "stats": []}
+    assert len(parse_match(r, "2024")["player_match"]) == 31
