@@ -18,6 +18,9 @@ __all__ = [
     "push_matches",
     "push_club_elo",
     "push_club_elo_history",
+    "link_fotmob",
+    "push_fotmob",
+    "push_fotmob_new",
     "push_isl",
     "push_isl_new",
     "push_player_xg",
@@ -167,4 +170,10 @@ from soccerhub.pipelines.understat import (  # noqa: E402
     push_shots,
     push_team_match,
 )
-from soccerhub.pipelines.fotmob_isl import push_isl, push_isl_new  # noqa: E402
+from soccerhub.pipelines.fotmob_isl import (  # noqa: E402
+    link_fotmob,
+    push_fotmob,
+    push_fotmob_new,
+    push_isl,
+    push_isl_new,
+)

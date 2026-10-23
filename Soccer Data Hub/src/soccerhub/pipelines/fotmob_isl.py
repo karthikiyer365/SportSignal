@@ -73,17 +73,41 @@ def _sider(team_ids: set, home_id: int, away_id: int):
     return is_home
 
 
-def parse_match(raw: dict, season: str) -> dict[str, pd.DataFrame]:
+def parse_match(raw: dict, season: str, league: str = LEAGUE,
+                team_names: dict[int, str] | None = None) -> dict[str, pd.DataFrame]:
     """One matchDetails payload -> rows for each hub table, keyed and ready to upsert."""
     c = raw["content"]
     match_id = int(raw["general"]["matchId"])
     date = raw["general"]["matchTimeUTCDate"][:10]
     home, away = raw["header"]["teams"]
-    # name as of that match (2021 Hyderabad FC, not SC Delhi): seasons stay historically true
-    name = {t["id"]: t["name"] for t in (home, away)}
+    # default: name as of that match (ISL 2021 Hyderabad FC, not SC Delhi). team_names
+    # overrides by FotMob team id (Big-5: headers drift 'Freiburg'/'SC Freiburg' mid-season)
+    name = {t["id"]: (team_names or {}).get(t["id"], t["name"]) for t in (home, away)}
     hn, an = name[home["id"]], name[away["id"]]
-    key = {"league": LEAGUE, "season": season}
+    key = {"league": league, "season": season}
     events = c["matchFacts"]["events"]["events"]
+    starters = {p["id"] for t in ("homeTeam", "awayTeam") for p in c["lineup"][t]["starters"]}
+    cards = pd.DataFrame([(e["player"]["id"], e.get("card")) for e in events
+                          if e["type"] == "Card" and e.get("player")], columns=["pid", "card"])
+    # FotMob occasionally has no player stats for a played match (4205608): no rows, not a crash
+    played = [(p, st) for p in (c["playerStats"] or {}).values()
+              if (st := _player_stats(p))["minutes"]]  # drops unused subs (some lack a teamId)
+    player_home = _sider({p["teamId"] for p, _ in played}, home["id"], away["id"])
+    rows = []
+    for p, st in played:
+        is_home = player_home(p["teamId"])
+        mine = cards[cards.pid == p["id"]].card
+        rows.append({
+            **key, "match_id": match_id, "fotmob_id": p["id"], "date": date,
+            "team": hn if is_home else an, "opponent": an if is_home else hn, "is_home": is_home,
+            "player_name": p["name"], "position": POSITION.get(p.get("usualPosition")),
+            "is_starter": p["id"] in starters, **st,
+            "yellow_cards": int((mine == "Yellow").sum()), "red_cards": int(mine.isin(["Red", "YellowRed"]).sum()),
+        })
+    player_match = pd.DataFrame(rows)
+    if league != LEAGUE:  # Big-5 stores player_match only: don't fail on frames we'd discard
+        return {"player_match": player_match}
+
     ht = next((e for e in events if e["type"] == "Half" and e.get("halfStrShort") == "HT"), None)
     ts = _team_stats(c)
 
@@ -130,25 +154,8 @@ def parse_match(raw: dict, season: str) -> dict[str, pd.DataFrame]:
                   if s["eventType"] == "AttemptSaved" else RESULT.get(s["eventType"], s["eventType"]),
     } for s in c["shotmap"]["shots"] if s.get("period") != "PenaltyShootout"])  # kicks aren't shots
 
-    starters = {p["id"] for t in ("homeTeam", "awayTeam") for p in c["lineup"][t]["starters"]}
-    cards = pd.DataFrame([(e["player"]["id"], e.get("card")) for e in events
-                          if e["type"] == "Card" and e.get("player")], columns=["pid", "card"])
-    played = [(p, st) for p in c["playerStats"].values()
-              if (st := _player_stats(p))["minutes"]]  # drops unused subs (some lack a teamId)
-    player_home = _sider({p["teamId"] for p, _ in played}, home["id"], away["id"])
-    rows = []
-    for p, st in played:
-        is_home = player_home(p["teamId"])
-        mine = cards[cards.pid == p["id"]].card
-        rows.append({
-            **key, "match_id": match_id, "fotmob_id": p["id"], "date": date,
-            "team": hn if is_home else an, "opponent": an if is_home else hn, "is_home": is_home,
-            "player_name": p["name"], "position": POSITION.get(p.get("usualPosition")),
-            "is_starter": p["id"] in starters, **st,
-            "yellow_cards": int((mine == "Yellow").sum()), "red_cards": int(mine.isin(["Red", "YellowRed"]).sum()),
-        })
     return {"matches": matches, "team_match": team_match, "shots": shots,
-            "player_match": pd.DataFrame(rows)}
+            "player_match": player_match}
 
 
 # player_match column -> player_season column, summed per player-team-season
@@ -207,54 +214,109 @@ def season_rows(pm: pd.DataFrame, shots: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def push_isl(season: str, force: bool = False,
-             match_ids: list[int] | None = None) -> dict[str, int]:
-    """One ISL season (or just `match_ids`) -> all five hub tables. Rows upserted per table."""
+def push_fotmob(league: str, season: str, force: bool = False,
+                match_ids: list[int] | None = None) -> dict[str, int]:
+    """One league-season (or just `match_ids`) from FotMob. Rows upserted per table.
+
+    ISL writes all five hub tables. Big-5 writes player_match only: their matches, shots
+    and season rows already come from football-data / Understat / FBref, and FotMob's
+    different ids and spellings would duplicate them.
+    """
     from soccerhub import pipelines as P
     from soccerhub.pipelines import query, supa
     from soccerhub.readers import fotmob as fm  # call-time: readers.fotmob imports pipelines.supa
 
+    payload = fm.fetch_league(league, season, force=force)
     if match_ids is None:
-        match_ids = fm.finished_match_ids(fm.fetch_league(season, force=force))
-    parts = [parse_match(fm.fetch_match(i, season, force=force), season) for i in match_ids]
+        match_ids = fm.finished_match_ids(payload)
+    # Big-5: one name per club per season, from the fixture list. ISL keeps per-match header
+    # names (its fixture lists show today's name for past seasons: SC Delhi, not Hyderabad FC)
+    names = None if league == LEAGUE else {int(m[side]["id"]): m[side]["name"]
+                                           for m in payload["fixtures"]["allMatches"]
+                                           for side in ("home", "away")}
+    parts = [parse_match(fm.fetch_match(i, season, league, force=force), season, league, names)
+             for i in match_ids]
+    tables = [("player_match", "player_match", P.PLAYER_MATCH_CONFLICT_KEY)]
+    if league == LEAGUE:
+        tables += [("matches", "matches", P.MATCHES_CONFLICT_KEY),
+                   ("team_match", "team_match_understat", P.TEAM_MATCH_CONFLICT_KEY),
+                   ("shots", "shots_understat", P.SHOTS_CONFLICT_KEY)]
     out = {}
-    for part, table, key in (("matches", "matches", P.MATCHES_CONFLICT_KEY),
-                             ("team_match", "team_match_understat", P.TEAM_MATCH_CONFLICT_KEY),
-                             ("shots", "shots_understat", P.SHOTS_CONFLICT_KEY),
-                             ("player_match", "player_match", P.PLAYER_MATCH_CONFLICT_KEY)):
+    for part, table, key in tables:
         df = pd.concat([p[part] for p in parts], ignore_index=True) if parts else pd.DataFrame()
         if len(df):
             out[table] = supa.upsert_df(df, table, key)
-    # season totals from the whole stored season, not just this batch
-    pm = query.read_hub("player_match", league=LEAGUE, season=season)
+    if league != LEAGUE:
+        return out
+    # ISL season totals from the whole stored season, not just this batch
+    pm = query.read_hub("player_match", league=league, season=season)
     shots = query.read_hub("shots_understat", select="player_id,team,situation,result",
-                           league=LEAGUE, season=season)
+                           league=league, season=season)
     if len(pm):
         out["player_season"] = supa.upsert_df(season_rows(pm, shots), "player_season",
                                               P.CONFLICT_KEY_PLAYER_SEASON)
     return out
 
 
-def push_isl_new() -> dict[str, int]:
-    """Weekly job: current ISL season, only finished matches not yet in player_match.
+def push_fotmob_new(league: str) -> dict[str, int]:
+    """Weekly job: current season, only finished matches not yet in player_match.
 
     Season comes from FotMob, not current_season(): ISL 2025/26 started in Feb 2026.
+    Always calls push_fotmob, so ISL season totals rebuild (self-heal) even with nothing new.
     """
     from soccerhub.pipelines import query
     from soccerhub.readers import fotmob as fm
 
-    league = fm.fetch_league(force=True)
-    season = league["allAvailableSeasons"][0][:4]
+    payload = fm.fetch_league(league, force=True)
+    season = payload["allAvailableSeasons"][0][:4]
     stored = set(query.read_hub("player_match", select="match_id",
-                                league=LEAGUE, season=season).get("match_id", []))
-    new = [i for i in fm.finished_match_ids(league) if i not in stored]
-    # even with nothing new, rebuild season totals: a failed player_season upsert self-heals
-    return push_isl(season, match_ids=new)
+                                league=league, season=season).get("match_id", []))
+    new = [i for i in fm.finished_match_ids(payload) if i not in stored]
+    return push_fotmob(league, season, match_ids=new)
+
+
+def link_fotmob(league: str, season: str) -> tuple[int, int]:
+    """Big-5: set player_season.fotmob_id on existing FBref rows. Returns (linked, hub_rows).
+
+    Reuses the Understat matcher (name, then movers by minutes, then fuzzy with a minutes
+    guard; ties rejected). Team names aren't compared: FotMob and FBref spell clubs
+    differently, and minutes already separate the candidates.
+    """
+    from soccerhub import pipelines as P
+    from soccerhub.pipelines import query, supa
+    from soccerhub.pipelines.understat import match_players
+
+    pm = query.read_hub("player_match", select="match_id,fotmob_id,team,player_name,minutes",
+                        league=league, season=season)
+    hub = query.read_hub("player_season", select="league,season,team,player_name,minutes",
+                         league=league, season=season)
+    if pm.empty or hub.empty:
+        return (0, len(hub))
+    # offset paging in read_hub has no ORDER BY: a repeated row would add a match's minutes
+    us = (pm.drop_duplicates(["match_id", "fotmob_id"]).groupby(["fotmob_id", "team"], as_index=False)
+            .agg(player=("player_name", "first"), minutes=("minutes", "sum")))
+    matched = match_players(us, hub, cols={"fotmob_id": "fotmob_id"})
+    if len(matched):
+        supa.upsert_df(matched, "player_season", P.CONFLICT_KEY_PLAYER_SEASON)
+    return (len(matched), len(hub))
+
+
+def push_isl(season: str, force: bool = False, match_ids: list[int] | None = None) -> dict[str, int]:
+    return push_fotmob(LEAGUE, season, force, match_ids)
+
+
+def push_isl_new() -> dict[str, int]:
+    return push_fotmob_new(LEAGUE)
 
 
 if __name__ == "__main__":
-    # python -m soccerhub.pipelines.fotmob_isl 2021 2022 2023 2024 2025 2026
+    # python -m soccerhub.pipelines.fotmob_isl eng 2021 2022 2023 2024 2025 2026
     import sys
 
-    for s in sys.argv[1:]:
-        print(s, push_isl(s), flush=True)
+    from soccerhub.readers.fotmob import SLUGS
+
+    league = {v: k for k, v in SLUGS.items()}[sys.argv[1]]
+    for s in sys.argv[2:]:
+        print(s, push_fotmob(league, s), flush=True)
+        if league != LEAGUE:
+            print(s, "link", link_fotmob(league, s), flush=True)

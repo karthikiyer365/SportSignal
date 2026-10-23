@@ -38,7 +38,8 @@ XG_COLS = {
 }
 
 
-def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
+def match_players(us: pd.DataFrame, hub: pd.DataFrame,
+                  cols: dict[str, str] = XG_COLS) -> pd.DataFrame:
     """Understat player-season rows -> hub player_season identities.
 
     Ladder (Understat has no birth year, so minutes agreement is the guard):
@@ -46,7 +47,7 @@ def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
       2. duplicated names (mid-season movers: one row per stint, both
          sources) paired greedily by closest minutes
       3. fuzzy name for leftovers, minutes-guarded
-    Returns hub key columns + XG_COLS values for matched rows.
+    Returns hub key columns + `cols` values (source col -> hub col) for matched rows.
     """
     us = us.reset_index(drop=True)
     hub = hub.reset_index(drop=True)
@@ -56,6 +57,7 @@ def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
     hub_min = hub["minutes"].fillna(0)
 
     pairs: list[tuple[int, int]] = []  # (hub_pos, us_pos)
+    tied: set[int] = set()  # hub rows rung 2 couldn't decide: rung 3 mustn't guess either
     hub_groups = hub.groupby(hub_norm).groups
     us_groups = us.groupby(us_norm).groups
 
@@ -65,15 +67,21 @@ def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
             continue
         hidx, uidx = list(hidx), list(uidx)
         if len(hidx) == 1 and len(uidx) == 1:
-            pairs.append((hidx[0], uidx[0]))
+            # a unique name can still be two people (FBref's starter vs another club's cameo)
+            if abs(hub_min[hidx[0]] - us_min[uidx[0]]) <= MINUTES_GUARD:
+                pairs.append((hidx[0], uidx[0]))
             continue
         # rung 2: same name several times = separate stints; align by minutes
         remaining = list(uidx)
         for h in sorted(hidx, key=lambda i: -hub_min[i]):
             if not remaining:
                 break
-            u = min(remaining, key=lambda i: abs(hub_min[h] - us_min[i]))
-            if abs(hub_min[h] - us_min[u]) <= MINUTES_GUARD:
+            gap = sorted((abs(hub_min[h] - us_min[i]), i) for i in remaining)
+            if len(gap) > 1 and gap[0][0] == gap[1][0]:
+                tied.add(h)  # two stints equally close: unknowable, so no guess
+                continue
+            u = gap[0][1]
+            if gap[0][0] <= MINUTES_GUARD:
                 pairs.append((h, u))
                 remaining.remove(u)
 
@@ -83,7 +91,7 @@ def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
     # the xG rather than one getting someone else's.
     used_h = {h for h, _ in pairs}
     used_u = {u for _, u in pairs}
-    left_h = [i for i in hub.index if i not in used_h]
+    left_h = [i for i in hub.index if i not in used_h and i not in tied]
     left_u = [i for i in us.index if i not in used_u]
     # longest-minutes first: the clearest cases claim their partner before
     # the marginal ones can muddy the pool
@@ -103,11 +111,11 @@ def match_players(us: pd.DataFrame, hub: pd.DataFrame) -> pd.DataFrame:
 
     if not pairs:
         return pd.DataFrame(columns=["league", "season", "team", "player_name",
-                                     *XG_COLS.values()])
+                                     *cols.values()])
     hi = [h for h, _ in pairs]
     ui = [u for _, u in pairs]
     out = hub.loc[hi, ["league", "season", "team", "player_name"]].reset_index(drop=True)
-    vals = us.loc[ui, list(XG_COLS)].rename(columns=XG_COLS).reset_index(drop=True)
+    vals = us.loc[ui, list(cols)].rename(columns=cols).reset_index(drop=True)
     return pd.concat([out, vals], axis=1)
 
 

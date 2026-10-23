@@ -87,7 +87,9 @@ def main() -> int:
 
     from soccerhub import (
         current_season,
+        link_fotmob,
         push_age_curve,
+        push_fotmob_new,
         push_isl_new,
         push_player_xg,
         push_shots,
@@ -122,17 +124,26 @@ def main() -> int:
     for league in todays:
         try:
             log(f"seasons  {league}: {run_season(league, season, force=True)}")
+            fbref_ok = True
         except SoccerhubError as exc:
             log(f"FAILED seasons {league}: {exc}")
             failures.append(f"seasons/{league}")
-            continue
-        for name, fn in (("player_xg", push_player_xg), ("team_match", push_team_match),
-                         ("shots", push_shots)):
-            try:
-                log(f"{name}  {league}: {fn(league, season, force=True)}")
-            except SoccerhubError as exc:
-                log(f"FAILED {name} {league}: {exc}")
-                failures.append(f"{name}/{league}")
+            fbref_ok = False
+        if fbref_ok:  # Understat stages update the rows run_season writes
+            for name, fn in (("player_xg", push_player_xg), ("team_match", push_team_match),
+                             ("shots", push_shots)):
+                try:
+                    log(f"{name}  {league}: {fn(league, season, force=True)}")
+                except SoccerhubError as exc:
+                    log(f"FAILED {name} {league}: {exc}")
+                    failures.append(f"{name}/{league}")
+        # FotMob is plain HTTP, independent of FBref: runs even when FBref was blocked.
+        try:
+            log(f"fotmob  {league}: {push_fotmob_new(league)}")
+            log(f"link  {league}: {link_fotmob(league, season)}")
+        except Exception as exc:  # ponytail: broad on purpose, FotMob raises plain HTTP/Key errors
+            log(f"FAILED fotmob {league}: {exc!r}")
+            failures.append(f"fotmob/{league}")
 
     # age_curve is derived from player_season across all leagues, so it runs once at the end.
     try:
