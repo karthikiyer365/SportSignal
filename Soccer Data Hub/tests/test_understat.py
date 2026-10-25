@@ -176,3 +176,21 @@ def test_match_players_rejects_ambiguous_short_name():
         ["ESP-La Liga", "2023", "Atletico Madrid", "Gabriel Martinelli", 1750],
     ])
     assert len(match_players(us, hub)) == 0
+
+
+def test_match_players_rung2_rejects_minutes_tie():
+    from soccerhub.pipelines.understat import match_players
+
+    # two source "Gabriel"s equally far (50 min) from the one hub "Gabriel": unknowable, no guess
+    us = _us([["Gabriel", "Arsenal", 1000, 1, 1, 0, 1, 0, 5, 2, 1],
+              ["Gabriel", "Brighton", 1100, 1, 1, 0, 1, 0, 5, 2, 2]])
+    hub = _hub([["ENG-Premier League", "2024", "Arsenal", "Gabriel", 1050]])
+    assert len(match_players(us, hub)) == 0
+
+
+def test_match_players_rung1_respects_minutes_guard():
+    from soccerhub.pipelines.understat import match_players
+
+    us = _us([["Gabriel", "Brentford", 120, 0, 0, 0, 0, 0, 1, 0, 9]])
+    hub = _hub([["ENG-Premier League", "2024", "Arsenal", "Gabriel", 2800]])
+    assert len(match_players(us, hub)) == 0

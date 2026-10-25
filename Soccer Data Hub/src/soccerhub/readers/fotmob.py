@@ -1,4 +1,4 @@
-"""FotMob ISL data (plain HTTP JSON, no key). Unofficial API: cache everything.
+"""FotMob data, ISL + Big 5 (plain HTTP JSON, no key). Unofficial API: cache everything.
 
 Raw payloads are kept gzipped under the local cache and, for matches, archived to
 the private `fotmob` Storage bucket so a FotMob change or block can't lose history.
@@ -13,7 +13,12 @@ import urllib.request
 from soccerhub.cache import cache_root
 from soccerhub.pipelines.supa import retry
 
-ISL_ID = 9478
+FOTMOB_IDS = {
+    "IND-Indian Super League": 9478, "ENG-Premier League": 47, "ESP-La Liga": 87,
+    "GER-Bundesliga": 54, "ITA-Serie A": 55, "FRA-Ligue 1": 53,
+}
+SLUGS = {"IND-Indian Super League": "isl", "ENG-Premier League": "eng", "ESP-La Liga": "esp",
+         "GER-Bundesliga": "ger", "ITA-Serie A": "ita", "FRA-Ligue 1": "fra"}
 BASE = "https://www.fotmob.com/api/data"
 BUCKET = "fotmob"
 MIN_GAP_S = 2.0  # one request at a time, politely spaced
@@ -53,31 +58,31 @@ def _cached(name: str, url: str, force: bool) -> tuple[dict, bytes | None]:
     return data, gz
 
 
-def _archive(match_id: int, season: str, gz: bytes) -> None:
+def _archive(match_id: int, season: str, gz: bytes, slug: str) -> None:
     from supabase import create_client
 
     bucket = create_client(os.environ["SUPABASE_URL"],
                            os.environ["SUPABASE_SERVICE_ROLE_KEY"]).storage.from_(BUCKET)
-    retry(lambda: bucket.upload(f"isl/{season}/{match_id}.json.gz", gz,
+    retry(lambda: bucket.upload(f"{slug}/{season}/{match_id}.json.gz", gz,
                                 {"content-type": "application/gzip", "upsert": "true"}))
 
 
-def fetch_league(season: str | None = None, force: bool = False) -> dict:
-    """ISL season payload: fixtures (match ids, status), table, available seasons.
+def fetch_league(league: str, season: str | None = None, force: bool = False) -> dict:
+    """League-season payload: fixtures (match ids, status), table, available seasons.
 
     season=None is FotMob's current season (allAvailableSeasons[0] names it).
     """
-    params = {"id": ISL_ID} | ({"season": fotmob_season(season)} if season else {})
+    params = {"id": FOTMOB_IDS[league]} | ({"season": fotmob_season(season)} if season else {})
     url = f"{BASE}/leagues?{urllib.parse.urlencode(params)}"
-    return _cached(f"league_{season or 'current'}", url, force)[0]
+    return _cached(f"league_{SLUGS[league]}_{season or 'current'}", url, force)[0]
 
 
-def fetch_match(match_id: int, season: str, force: bool = False,
+def fetch_match(match_id: int, season: str, league: str, force: bool = False,
                 archive: bool = True) -> dict:
     """matchDetails payload: shotmap, playerStats, lineup, team stats, events."""
     data, gz = _cached(f"match_{match_id}", f"{BASE}/matchDetails?matchId={match_id}", force)
     if archive and gz is not None:
-        _archive(match_id, season, gz)
+        _archive(match_id, season, gz, SLUGS[league])
     return data
 
 

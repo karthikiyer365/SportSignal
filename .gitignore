@@ -57,6 +57,9 @@ output/
 !site/**
 # every action per player (~22 MB per league): served locally, live copy in Supabase Storage
 site/data/action_score/*/player_actions/
+# WhoScored seasons refresh weekly: all their files live in Storage, not git
+site/data/action_score/*-2025/
+site/data/action_score/*-2026/
 
 # ── Local working notes (not versioned) ───────────────────────────
 /SOCCER_DS_BACKLOG.md

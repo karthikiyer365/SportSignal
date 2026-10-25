@@ -1,5 +1,9 @@
 # Topical Map
 
+> **Stale since 2026-10-25.** FotMob (ISL + Big-5 `player_match`), WhoScored VAEP, the daily
+> launchd schedule and migrations 0012–0013 are not in this map yet. Current reference:
+> [`SYSTEM_MAP.md`](SYSTEM_MAP.md). Regenerate this file rather than patching it.
+
 Generated 2026-07-17 at `8fb49fd` (+ match-center branch) · `⟶` = dependency edge ·
 `▓ planned ▓` = claimed in docs/UI but absent from code · regenerate stale sections,
 don't patch prose.

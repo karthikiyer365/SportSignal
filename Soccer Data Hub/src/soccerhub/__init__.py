@@ -21,6 +21,9 @@ from soccerhub.pipelines import (
     push_age_curve,
     push_club_elo,
     push_club_elo_history,
+    link_fotmob,
+    push_fotmob,
+    push_fotmob_new,
     push_isl,
     push_isl_new,
     push_matches,
@@ -32,7 +35,12 @@ from soccerhub.pipelines import (
     read_hub,
     run_season,
 )
-from soccerhub.pipelines.action_score import build_action_score, export_action_score_site
+from soccerhub.pipelines.action_score import (
+    build_action_score,
+    export_action_score_site,
+    link_whoscored,
+    refresh_current,
+)
 
 __all__ = [
     "ask",
@@ -56,6 +64,9 @@ __all__ = [
     "push_matches",
     "push_club_elo",
     "push_club_elo_history",
+    "link_fotmob",
+    "push_fotmob",
+    "push_fotmob_new",
     "push_isl",
     "push_isl_new",
     "push_player_xg",
@@ -66,4 +77,6 @@ __all__ = [
     "run_season",
     "build_action_score",
     "export_action_score_site",
+    "link_whoscored",
+    "refresh_current",
 ]

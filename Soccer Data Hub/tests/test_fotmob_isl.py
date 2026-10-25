@@ -116,11 +116,13 @@ def wired(monkeypatch, raw):
 
     state = {"fetched": [], "upserts": [], "stored": [], "finished": [4617934, 555]}
     league = {"allAvailableSeasons": ["2024/2025", "2023/2024"],
-              "fixtures": {"allMatches": [{"id": str(i), "status": {"finished": True}}
+              "fixtures": {"allMatches": [{"id": str(i), "status": {"finished": True},
+                                           "home": {"id": 578651, "name": "MBSG (fixtures)"},
+                                           "away": {"id": 578655, "name": "MCFC (fixtures)"}}
                                           for i in state["finished"]]}}
-    monkeypatch.setattr(fm, "fetch_league", lambda season=None, force=False: league)
+    monkeypatch.setattr(fm, "fetch_league", lambda lg, season=None, force=False: league)
     monkeypatch.setattr(fm, "fetch_match",
-                        lambda i, season, force=False: state["fetched"].append(i) or raw)
+                        lambda i, season, lg, force=False: state["fetched"].append(i) or raw)
 
     def read_hub(table, select="*", **eq):
         if table == "player_match" and select == "match_id":
@@ -129,7 +131,12 @@ def wired(monkeypatch, raw):
         return p["player_match"] if table == "player_match" else p["shots"]
 
     monkeypatch.setattr(q, "read_hub", read_hub)
-    monkeypatch.setattr(sp, "upsert_df", lambda df, table, key: state["upserts"].append((table, key)) or len(df))
+    def upsert(df, table, key):
+        state["upserts"].append((table, key))
+        state.setdefault("frames", {})[table] = df
+        return len(df)
+
+    monkeypatch.setattr(sp, "upsert_df", upsert)
     return state
 
 
@@ -219,3 +226,134 @@ def test_statless_player_without_team_id_is_skipped(raw):
     r = copy.deepcopy(raw)
     r["content"]["playerStats"]["1"] = {"name": "Ghost", "id": 1, "isGoalkeeper": False, "stats": []}
     assert len(parse_match(r, "2024")["player_match"]) == 31
+
+
+def test_big5_push_writes_only_player_match(wired):
+    from soccerhub.pipelines.fotmob_isl import push_fotmob
+
+    out = push_fotmob("ENG-Premier League", "2024", match_ids=[4617934])
+    assert [t for t, _ in wired["upserts"]] == ["player_match"]
+    assert out == {"player_match": 31}
+
+
+def test_parse_match_carries_league(raw):
+    from soccerhub.pipelines.fotmob_isl import parse_match
+
+    p = parse_match(raw, "2024", "ESP-La Liga")
+    assert {f.league.iat[0] for f in p.values()} == {"ESP-La Liga"}
+
+
+def test_big5_parse_ignores_team_stats_it_doesnt_store(raw):
+    import copy
+
+    from soccerhub.pipelines.fotmob_isl import parse_match
+
+    r = copy.deepcopy(raw)
+    del r["content"]["stats"]          # e.g. an abandoned match; Big-5 never stores team stats
+    p = parse_match(r, "2024", "ENG-Premier League")
+    assert list(p) == ["player_match"] and len(p["player_match"]) == 31
+
+
+def test_isl_aliases_still_write_all_tables(wired):
+    from soccerhub.pipelines.fotmob_isl import push_isl
+
+    push_isl("2024", match_ids=[4617934])
+    assert {t for t, _ in wired["upserts"]} == {"matches", "team_match_understat", "shots_understat",
+                                                "player_match", "player_season"}
+
+
+@pytest.fixture
+def link_wired(monkeypatch):
+    """link_fotmob with read_hub/upsert faked: tables set per test via state."""
+    import soccerhub.pipelines.query as q
+    import soccerhub.pipelines.supa as sp
+
+    state = {"player_match": None, "player_season": None, "upserts": {}}
+    monkeypatch.setattr(q, "read_hub", lambda table, select="*", **eq: state[table])
+    monkeypatch.setattr(sp, "upsert_df", lambda df, table, key: state["upserts"].__setitem__(table, df) or len(df))
+    return state
+
+
+def _hub_rows(rows):
+    return pd.DataFrame(rows, columns=["league", "season", "team", "player_name", "minutes"])
+
+
+def _fm_rows(rows):
+    df = pd.DataFrame(rows, columns=["fotmob_id", "team", "player_name", "minutes"])
+    return df.assign(match_id=range(len(df)))
+
+
+def test_link_fotmob_sets_ids_and_only_that_column(link_wired):
+    from soccerhub.pipelines.fotmob_isl import link_fotmob
+
+    link_wired["player_match"] = _fm_rows([
+        [9, "Real Madrid", "Vinicius Junior", 90], [9, "Real Madrid", "Vinicius Junior", 80],
+        [5, "Chelsea", "Joao Felix", 900], [5, "Barcelona", "Joao Felix", 1200]])
+    link_wired["player_season"] = _hub_rows([
+        ["ESP-La Liga", "2024", "Real Madrid", "Vinícius Júnior", 170],
+        ["ESP-La Liga", "2024", "Chelsea", "João Félix", 880],
+        ["ESP-La Liga", "2024", "Barcelona", "João Félix", 1250]])
+    linked, total = link_fotmob("ESP-La Liga", "2024")
+    df = link_wired["upserts"]["player_season"]
+    assert set(df.columns) == {"league", "season", "team", "player_name", "fotmob_id"}
+    assert (linked, total) == (3, 3)
+    assert set(df.fotmob_id) == {9, 5}
+    assert df.set_index("team").loc["Barcelona", "player_name"] == "João Félix"
+
+
+def test_link_fotmob_leaves_equal_distance_tie_unlinked(link_wired):
+    from soccerhub.pipelines.fotmob_isl import link_fotmob
+
+    link_wired["player_match"] = _fm_rows([[1, "Arsenal", "Gabriel", 1000], [2, "Brighton", "Gabriel", 1100]])
+    link_wired["player_season"] = _hub_rows([["ENG-Premier League", "2024", "Arsenal", "Gabriel", 1050]])
+    linked, _ = link_fotmob("ENG-Premier League", "2024")
+    assert linked == 0
+
+
+def test_link_fotmob_ignores_repeated_page_rows(link_wired):
+    from soccerhub.pipelines.fotmob_isl import link_fotmob
+
+    pm = _fm_rows([[5, "Chelsea", "Joao Felix", 900], [5, "Barcelona", "Joao Felix", 1200]])
+    link_wired["player_match"] = pd.concat([pm] + [pm.iloc[[1]]] * 6)  # page overlap: +540 min
+    link_wired["player_season"] = _hub_rows([
+        ["ESP-La Liga", "2024", "Chelsea", "João Félix", 880],
+        ["ESP-La Liga", "2024", "Barcelona", "João Félix", 1250]])
+    assert link_fotmob("ESP-La Liga", "2024") == (2, 2)
+
+
+def test_link_fotmob_exact_name_still_needs_close_minutes(link_wired):
+    from soccerhub.pipelines.fotmob_isl import link_fotmob
+
+    # FBref's "Gabriel" is a 2,800-min starter; FotMob's only "Gabriel" is a 120-min cameo elsewhere
+    link_wired["player_match"] = _fm_rows([[3, "Brentford", "Gabriel", 120]])
+    link_wired["player_season"] = _hub_rows([["ENG-Premier League", "2024", "Arsenal", "Gabriel", 2800]])
+    assert link_fotmob("ENG-Premier League", "2024") == (0, 1)
+
+
+def test_match_without_player_stats_yields_no_player_rows(raw):
+    """FotMob 4205608 (Mallorca-Girona, 2024-03-03): finished, has shots, playerStats is null."""
+    import copy
+
+    from soccerhub.pipelines.fotmob_isl import parse_match
+
+    r = copy.deepcopy(raw)
+    r["content"]["playerStats"] = None
+    assert parse_match(r, "2024", "ESP-La Liga")["player_match"].empty
+    assert len(parse_match(r, "2024")["shots"]) == 21  # ISL path still parses the rest
+
+
+def test_big5_team_names_come_from_the_season_fixture_list(wired):
+    """FotMob match headers alternate 'Freiburg' / 'SC Freiburg' within a season; fixtures don't."""
+    from soccerhub.pipelines.fotmob_isl import push_fotmob
+
+    push_fotmob("GER-Bundesliga", "2022", match_ids=[4617934])
+    pm = wired["frames"]["player_match"]
+    assert set(pm.team) == {"MBSG (fixtures)", "MCFC (fixtures)"}
+    assert set(pm.opponent) == {"MBSG (fixtures)", "MCFC (fixtures)"}
+
+
+def test_isl_keeps_header_team_names(wired):
+    from soccerhub.pipelines.fotmob_isl import push_isl
+
+    push_isl("2024", match_ids=[4617934])
+    assert set(wired["frames"]["player_match"].team) == {"Mohun Bagan SG", "Mumbai City FC"}

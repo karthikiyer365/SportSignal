@@ -15,6 +15,7 @@ import pandas as pd
 from soccerhub.cache import cached_fetch
 from soccerhub.manifest import Manifest
 from soccerhub.readers.statsbomb_spadl import fetch_statsbomb_spadl
+from soccerhub.readers.whoscored_spadl import fetch_whoscored_spadl
 from soccerhub.readers.wyscout_spadl import fetch_wyscout_spadl
 
 # Every complete top-5 league-season in open event data: (league, season start) -> (provider, ids).
@@ -30,6 +31,10 @@ LEAGUE_SEASONS = {
     ("ITA-Serie A", "2017"): ("wyscout", 524, 181248),
     ("FRA-Ligue 1", "2017"): ("wyscout", 412, 181189),
     ("GER-Bundesliga", "2017"): ("wyscout", 426, 181137),
+    # WhoScored (Opta), current seasons: ids are soccerdata's league name and season code
+    **{(lg, s): ("whoscored", lg, code)
+       for lg in ("ENG-Premier League", "ESP-La Liga", "GER-Bundesliga", "ITA-Serie A", "FRA-Ligue 1")
+       for s, code in (("2025", "2526"), ("2026", "2627"))},
 }
 MIN_MINUTES_RANK = 900  # guess, not derived: revisit after the reliability check
 MIN_MINUTES_HALF = 450  # reliability check: minutes needed in each fold
@@ -188,6 +193,8 @@ def _player_file(df: pd.DataFrame) -> dict:
     """Every action of one player as columns of plain numbers (~30 bytes per action, not ~140)."""
     types = sorted(df.type_name.unique())
     code = {t: i for i, t in enumerate(types)}
+    # Opta logs a few dribbles with no end point: draw them as zero-length, not a crash
+    df = df.assign(end_x=df.end_x.fillna(df.start_x), end_y=df.end_y.fillna(df.start_y))
     xy = lambda c: df[c].round().astype(int).tolist()  # 1 m precision is plenty for a pitch map
     return {
         "types": types,
@@ -239,15 +246,21 @@ def _storage():
     return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"]).storage
 
 
-def upload_player_actions(league_dir) -> int:
-    """Upload <league>/player_actions/*.json to the public bucket. Re-runs overwrite. Returns files sent."""
+def upload_player_actions(league_dir, with_tables: bool = False) -> int:
+    """Upload <league>/player_actions/*.json to the public bucket. Re-runs overwrite. Returns files sent.
+
+    with_tables: also players/zones/games.json. A season in progress changes them weekly, so
+    they live in Storage, not git (the live site is served from git).
+    """
     league_dir = Path(league_dir)
     bucket = _storage().from_(BUCKET)
     files = sorted((league_dir / "player_actions").glob("*.json"))
+    if with_tables:
+        files += [league_dir / f"{t}.json" for t in ("players", "zones", "games")]
     for f in files:
         for attempt in range(3):  # a TLS blip over ~4,800 sequential uploads must not end the run
             try:
-                bucket.upload(f"{league_dir.name}/player_actions/{f.name}", f.read_bytes(),
+                bucket.upload(str(f.relative_to(league_dir.parent)), f.read_bytes(),
                               {"content-type": "application/json", "upsert": "true", "cache-control": "86400"})
                 break
             except Exception:  # ponytail: retries every error; a real 403 just fails 3 times, then raises
@@ -260,7 +273,8 @@ def upload_player_actions(league_dir) -> int:
 LIABILITIES = """\
 Liabilities (read before quoting any number):
 - Model dependence: one model per league-season, one learner (xgboost), 2-fold out-of-fold.
-- Provider: StatsBomb (2015/16) and Wyscout (2017/18) log events differently; never compare across.
+- Provider: StatsBomb (2015/16), Wyscout (2017/18) and WhoScored/Opta (2025-) log events differently;
+  never compare across. A season in progress is rated on fewer games: low confidence before 190.
 - Blind spots: undervalues defending; off-ball runs are invisible.
 - Team style inflates players: Leicester's counter-attacking shapes their numbers.
 - Meaning: "what he added on the ball this season", not "how good he is"."""
@@ -268,19 +282,24 @@ Liabilities (read before quoting any number):
 
 def build_action_score(
     competition_id: int = 2, season_id: int = 27, force: bool = False, refetch: bool = False,
-    provider: str = "statsbomb",
+    provider: str = "statsbomb", refresh: bool = False,
 ) -> dict[str, Manifest]:
-    """force = re-run the model (minutes); refetch = re-download every game (20-40 min).
+    """force = re-run the model (minutes); refetch = re-download every game (20-40 min);
+    refresh = season in progress: fetch only new games, then re-run the model.
 
     The ratings cache key has no code version: after changing the model, folds or zones, pass force=True.
     """
-    fetch = fetch_wyscout_spadl if provider == "wyscout" else fetch_statsbomb_spadl
-    src = fetch(competition_id, season_id, refetch)  # provider ids never overlap, so cache keys don't either
+    if provider == "whoscored":
+        src = fetch_whoscored_spadl(competition_id, season_id, refetch, refresh)
+    else:
+        fetch = fetch_wyscout_spadl if provider == "wyscout" else fetch_statsbomb_spadl
+        src = fetch(competition_id, season_id, refetch)  # provider ids never overlap, so cache keys don't either
     params = {"competition_id": competition_id, "season_id": season_id}
     games = pd.read_parquet(src["games"].path)
     actions_m = cached_fetch(
         "action_score", "actions_vaep", params,
-        lambda: attack_left_to_right(rate_out_of_fold(games, pd.read_parquet(src["actions"].path)), games), force,
+        lambda: attack_left_to_right(rate_out_of_fold(games, pd.read_parquet(src["actions"].path)), games),
+        force or refresh,
     )
     return {"games": src["games"], "players": src["players"], "actions_vaep": actions_m}
 
@@ -292,29 +311,61 @@ def selected(only) -> list[tuple[str, str]]:
     return [k for k in LEAGUE_SEASONS if (not leagues or k[0] in leagues) and (not seasons or k[1] in seasons)]
 
 
+def _rate_and_export(league: str, season: str, force: bool = False, refresh: bool = False) -> int:
+    """Rate one league-season, print its validation, write its site files. Returns games rated."""
+    provider, competition_id, season_id = LEAGUE_SEASONS[(league, season)]
+    print(f"\n===== {league} {season}/{int(season[2:]) + 1} ({provider}) =====")
+    m = build_action_score(competition_id, season_id, force=force, provider=provider, refresh=refresh)
+    games, players = pd.read_parquet(m["games"].path), pd.read_parquet(m["players"].path)
+    rated = pd.read_parquet(m["actions_vaep"].path)
+    table = player_table(rated, players)  # one groupby: cheap, so never cached and never stale
+
+    report = validate(rated, games, players)
+    for k, v in report.items():
+        if k != "team_table":
+            print(f"{k:22} {v:.3f}" if isinstance(v, float) else f"{k:22} {v}")
+    teams = players.drop_duplicates("team_id").set_index("team_id").team_name
+    print(report["team_table"].rename(index=teams).to_string())
+
+    ranked = table[table.minutes >= MIN_MINUTES_RANK].sort_values("vaep_per90", ascending=False)
+    print(ranked.head(10).to_string(index=False))
+    print("site export bytes:", export_action_score_site(games, players, rated, table, site_dir(league, season)))
+    return len(games)
+
+
 def main(force: bool = False, only=(), upload: bool = False):
     """Rate and export every league-season, or only the ones `selected(only)` picks."""
     for league, season in selected(only):
-        provider, competition_id, season_id = LEAGUE_SEASONS[(league, season)]
-        print(f"\n===== {league} {season}/{int(season[2:]) + 1} ({provider}) =====")
-        m = build_action_score(competition_id, season_id, force=force, provider=provider)
-        games, players = pd.read_parquet(m["games"].path), pd.read_parquet(m["players"].path)
-        rated = pd.read_parquet(m["actions_vaep"].path)
-        table = player_table(rated, players)  # one groupby: cheap, so never cached and never stale
-
-        report = validate(rated, games, players)
-        for k, v in report.items():
-            if k != "team_table":
-                print(f"{k:22} {v:.3f}" if isinstance(v, float) else f"{k:22} {v}")
-        teams = players.drop_duplicates("team_id").set_index("team_id").team_name
-        print(report["team_table"].rename(index=teams).to_string())
-
-        ranked = table[table.minutes >= MIN_MINUTES_RANK].sort_values("vaep_per90", ascending=False)
-        print(ranked.head(10).to_string(index=False))
-        print("site export bytes:", export_action_score_site(games, players, rated, table, site_dir(league, season)))
+        _rate_and_export(league, season, force=force)
         if upload:
-            print("uploaded player files:", upload_player_actions(site_dir(league, season)))
+            tables = LEAGUE_SEASONS[(league, season)][0] == "whoscored"
+            print("uploaded files:", upload_player_actions(site_dir(league, season), with_tables=tables))
     print(LIABILITIES)
+
+
+def link_whoscored(league: str, season: str) -> tuple[int, int]:
+    """player_season.whoscored_id from the season's WhoScored player minutes (cached fetch)."""
+    from soccerhub.pipelines.fotmob_isl import link_ids
+
+    if LEAGUE_SEASONS.get((league, season), ("",))[0] != "whoscored":
+        return (0, 0)
+    _, comp, code = LEAGUE_SEASONS[(league, season)]
+    players = pd.read_parquet(fetch_whoscored_spadl(comp, code)["players"].path)
+    us = (players.groupby(["player_id", "team_name"], as_index=False)
+                 .agg(player=("player_name", "first"), minutes=("minutes_played", "sum")))
+    return link_ids(us, league, season, {"player_id": "whoscored_id"})
+
+
+def refresh_current(league: str, season: str) -> dict:
+    """Weekly: one WhoScored league-season -> new games, re-rate, export, upload.
+
+    Takes the caller's season so the refresh and the link always agree; a season with no
+    WhoScored entry (e.g. next August before LEAGUE_SEASONS is extended) is skipped, not failed.
+    """
+    if LEAGUE_SEASONS.get((league, season), ("",))[0] != "whoscored":
+        return {"skipped": f"no WhoScored season {league} {season}"}
+    games = _rate_and_export(league, season, refresh=True)
+    return {"games_total": games, "upload": upload_player_actions(site_dir(league, season), with_tables=True)}
 
 
 if __name__ == "__main__":
