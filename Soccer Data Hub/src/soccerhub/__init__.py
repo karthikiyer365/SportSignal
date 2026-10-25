@@ -35,7 +35,12 @@ from soccerhub.pipelines import (
     read_hub,
     run_season,
 )
-from soccerhub.pipelines.action_score import build_action_score, export_action_score_site
+from soccerhub.pipelines.action_score import (
+    build_action_score,
+    export_action_score_site,
+    link_whoscored,
+    refresh_current,
+)
 
 __all__ = [
     "ask",
@@ -72,4 +77,6 @@ __all__ = [
     "run_season",
     "build_action_score",
     "export_action_score_site",
+    "link_whoscored",
+    "refresh_current",
 ]

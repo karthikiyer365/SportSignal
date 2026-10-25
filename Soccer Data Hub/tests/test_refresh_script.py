@@ -66,7 +66,7 @@ def test_isl_day_runs_isl_not_fbref(mod, monkeypatch):
     assert calls == ["isl"]
 
 
-def _big5_day(mod, monkeypatch, calls, run_season, push_fotmob_new):
+def _big5_day(mod, monkeypatch, calls, run_season, push_fotmob_new, refresh_current=None):
     import soccerhub
 
     monkeypatch.setattr(mod, "load_env", lambda path: None)
@@ -81,6 +81,9 @@ def _big5_day(mod, monkeypatch, calls, run_season, push_fotmob_new):
         monkeypatch.setattr(soccerhub, name, lambda *a, **k: calls.append("understat"))
     monkeypatch.setattr(soccerhub, "push_fotmob_new", push_fotmob_new)
     monkeypatch.setattr(soccerhub, "link_fotmob", lambda lg, s: calls.append("link") or (1, 1))
+    monkeypatch.setattr(soccerhub, "refresh_current",
+                        refresh_current or (lambda lg, s: calls.append("whoscored") or {"games_total": 1}))
+    monkeypatch.setattr(soccerhub, "link_whoscored", lambda lg, s: calls.append("ws_link") or (1, 1))
     monkeypatch.setattr(soccerhub, "push_age_curve", lambda: calls.append("age"))
     return mod.main()
 
@@ -95,7 +98,7 @@ def test_big5_day_runs_fotmob_even_when_fbref_blocked(mod, monkeypatch):
         raise SoccerhubError("IP block")
 
     rc = _big5_day(mod, monkeypatch, calls, blocked, lambda lg: calls.append("fotmob") or {})
-    assert calls == ["fbref", "fotmob", "link", "age"] and rc == 1
+    assert calls == ["fbref", "fotmob", "link", "whoscored", "ws_link", "age"] and rc == 1
 
 
 def test_fotmob_http_error_is_logged_not_fatal(mod, monkeypatch):
@@ -109,3 +112,23 @@ def test_fotmob_http_error_is_logged_not_fatal(mod, monkeypatch):
 
     rc = _big5_day(mod, monkeypatch, calls, lambda *a, **k: calls.append("fbref"), http_down)
     assert "age" in calls and "link" not in calls and rc == 1
+
+
+def test_big5_day_runs_whoscored_after_fotmob(mod, monkeypatch):
+    calls = []
+    rc = _big5_day(mod, monkeypatch, calls, lambda *a, **k: calls.append("fbref"),
+                   lambda lg: calls.append("fotmob") or {})
+    assert calls == ["fbref", "understat", "understat", "understat", "fotmob", "link",
+                     "whoscored", "ws_link", "age"] and rc == 0
+
+
+def test_whoscored_block_is_logged_not_fatal(mod, monkeypatch):
+    calls = []
+
+    def blocked(lg, s):
+        calls.append("whoscored")
+        raise RuntimeError("Cloudflare challenge")
+
+    rc = _big5_day(mod, monkeypatch, calls, lambda *a, **k: calls.append("fbref"),
+                   lambda lg: calls.append("fotmob") or {}, blocked)
+    assert "age" in calls and "ws_link" not in calls and rc == 1

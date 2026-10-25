@@ -88,12 +88,14 @@ def main() -> int:
     from soccerhub import (
         current_season,
         link_fotmob,
+        link_whoscored,
         push_age_curve,
         push_fotmob_new,
         push_isl_new,
         push_player_xg,
         push_shots,
         push_team_match,
+        refresh_current,
         run_season,
     )
     from soccerhub.errors import SoccerhubError
@@ -144,6 +146,13 @@ def main() -> int:
         except Exception as exc:  # ponytail: broad on purpose, FotMob raises plain HTTP/Key errors
             log(f"FAILED fotmob {league}: {exc!r}")
             failures.append(f"fotmob/{league}")
+        # WhoScored last: the second browser-gated source, as far after FBref as the day allows
+        try:
+            log(f"whoscored  {league}: {refresh_current(league, season)}")
+            log(f"ws_link  {league}: {link_whoscored(league, season)}")
+        except Exception as exc:  # ponytail: broad on purpose, a Cloudflare block raises plain errors
+            log(f"FAILED whoscored {league}: {exc!r}")
+            failures.append(f"whoscored/{league}")
 
     # age_curve is derived from player_season across all leagues, so it runs once at the end.
     try:

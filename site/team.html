@@ -36,7 +36,7 @@
   table.squad td:nth-child(2),table.squad th:nth-child(2){text-align:right}
   table.squad tbody tr{cursor:pointer}
   table.standings td:nth-child(2),table.standings th:nth-child(2){text-align:left}
-  #lgsel{padding:8px 14px;border-radius:999px;border:1px solid var(--rule);background:var(--field);
+  #lgsel,#gamesel{padding:8px 14px;border-radius:999px;border:1px solid var(--rule);background:var(--field);
        color:var(--ink);font:inherit;font-size:.9rem;margin:0 0 4px}
   table.squad tbody tr[aria-selected="true"]{background:rgba(255,180,58,.16)}
 
@@ -88,6 +88,7 @@
 
   <div class="box">
     <h2>Every action, one player <span class="plain" id="actmeta"></span></h2>
+    <select id="gamesel" aria-label="Show one match or the whole season"></select>
     <div class="actgrid">
       <div class="chartbox" id="actmap"><div class="empty">Loading…</div></div>
       <div class="squad" id="squad"></div>
@@ -124,8 +125,20 @@ const LEAGUES = [
   ["ita-serie-a-2017", "Serie A", "2017/18", "wyscout"],
   ["ger-bundesliga-2017", "Bundesliga", "2017/18", "wyscout"],
   ["fra-ligue-1-2017", "Ligue 1", "2017/18", "wyscout"],
+  ["eng-premier-league-2026", "Premier League", "2026/27", "whoscored"],
+  ["esp-la-liga-2026", "La Liga", "2026/27", "whoscored"],
+  ["ger-bundesliga-2026", "Bundesliga", "2026/27", "whoscored"],
+  ["ita-serie-a-2026", "Serie A", "2026/27", "whoscored"],
+  ["fra-ligue-1-2026", "Ligue 1", "2026/27", "whoscored"],
+  ["eng-premier-league-2025", "Premier League", "2025/26", "whoscored"],
+  ["esp-la-liga-2025", "La Liga", "2025/26", "whoscored"],
+  ["ger-bundesliga-2025", "Bundesliga", "2025/26", "whoscored"],
+  ["ita-serie-a-2025", "Serie A", "2025/26", "whoscored"],
+  ["fra-ligue-1-2025", "Ligue 1", "2025/26", "whoscored"],
 ];
 const PROVIDERS = {
+  whoscored: {label: "WhoScored (Opta) · current", source: "WhoScored match centre (Opta event data)",
+    note: "Opta logs events differently from StatsBomb and Wyscout: not comparable across providers. A season in progress is rated on fewer games: treat values before ~190 games as low confidence."},
   statsbomb: {label: "StatsBomb · 2015/16", source: 'StatsBomb open data'},
   // CC BY 4.0 requires this credit
   wyscout: {label: "Wyscout · 2017/18",
@@ -152,13 +165,17 @@ const showTip = (e, html) => { const t=tipEl(); t.innerHTML=html; t.style.displa
   t.style.left=Math.min(e.clientX+14, innerWidth-200)+"px"; t.style.top=(e.clientY+14)+"px"; };
 const hideTip = () => tipEl().style.display="none";
 // re-exports overwrite files in place: revalidate every load (cheap 304 if unchanged), never serve a stale copy
-const getJSON = async path => { const r = await fetch(`${DATA}${league}/${path}`, {cache: "no-cache"});
+// WhoScored seasons refresh weekly, so their tables live in Storage, not git
+const getJSON = async path => { const base = LEAGUES.find(l => l[0] === league)[3] === "whoscored" ? ACTIONS_BASE : DATA;
+  const r = await fetch(`${base}${league}/${path}`, {cache: "no-cache"});
   if(!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const f1 = v => (v >= 0 ? "+" : "") + v.toFixed(1);
 const f2 = v => (v >= 0 ? "+" : "") + v.toFixed(2);
 const f3 = v => (v >= 0 ? "+" : "") + v.toFixed(3);
 
-let PLAYERS = [], ZONES = [], GAMES = {}, team = null, pid = null, acts = null;
+let PLAYERS = [], ZONES = [], GAMES = {}, team = null, pid = null, acts = null, game = null;  // game null = whole season
+const setURL = () => history.replaceState(null, "", `?lg=${league}&team=${team}` +
+  (pid ? `&player=${pid}` : "") + (game ? `&game=${game}` : ""));
 
 function pitchLines(){
   const L = (x1,y1,x2,y2) => `<line x1="${X(x1)}" y1="${Y(y1)}" x2="${X(x2)}" y2="${Y(y2)}"/>`;
@@ -227,7 +244,7 @@ function drawSquad(){
 }
 
 function pickPlayer(id){
-  pid = id;
+  pid = id; game = null; setURL();
   document.querySelectorAll("#squad tr[data-pid]").forEach(r => r.setAttribute("aria-selected", +r.dataset.pid === id));
   loadPlayer(id);
 }
@@ -239,22 +256,46 @@ squadEl.addEventListener("keydown", e => {
   if(r && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); pickPlayer(+r.dataset.pid); }
 });
 
+const FILES = new Map();  // league/player -> parsed actions, so teammates load once per league
+function actionsOf(id){
+  const key = `${league}/${id}`;
+  if(!FILES.has(key)) FILES.set(key, fetch(`${ACTIONS_BASE}${league}/player_actions/${id}.json`, {cache: "no-cache"})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
+    // columns -> rows; the file stores plain numbers to stay small
+    .then(f => f.g.map((g, i) => ({g, m: f.m[i], type: f.types[f.t[i]], ok: f.r[i] === 1,
+      x0: f.x0[i], y0: f.y0[i], x1: f.x1[i], y1: f.y1[i], v: f.v[i]})))
+    .catch(e => { FILES.delete(key); throw e; }));
+  return FILES.get(key);
+}
+
 async function loadPlayer(pid){
   document.getElementById("actmap").innerHTML = `<div class="empty">Loading…</div>`;
   try {
-    const r = await fetch(`${ACTIONS_BASE}${league}/player_actions/${pid}.json`, {cache: "no-cache"});
-    if(!r.ok) throw new Error(r.status);
-    const f = await r.json();
-    // columns -> rows; the file stores plain numbers to stay small
-    acts = f.g.map((g, i) => ({g, m: f.m[i], type: f.types[f.t[i]], ok: f.r[i] === 1,
-      x0: f.x0[i], y0: f.y0[i], x1: f.x1[i], y1: f.y1[i], v: f.v[i]}));
+    acts = await actionsOf(pid);
   } catch(err) {
     acts = null;
     document.getElementById("actmap").innerHTML = `<div class="empty">No action file for this player (${esc(err.message)}).</div>`;
     return;
   }
+  if(game && !acts.some(a => a.g === game)) game = null;  // asked-for match he didn't play
+  drawGameSelect();
   drawActions(pid);
 }
+
+function drawGameSelect(){
+  const mine = PLAYERS.find(p => p.team_id === team)?.team_name;
+  const played = [...new Set(acts.map(a => a.g))].map(g => GAMES[g]).filter(Boolean)
+    .sort((a, b) => a.game_date.localeCompare(b.game_date));
+  const sel = document.getElementById("gamesel");
+  sel.innerHTML = `<option value="">Whole season · ${played.length} matches</option>` + played.map(g => {
+    const home = g.home_team === mine;
+    return `<option value="${g.game_id}">${g.game_date} · vs ${esc(home ? g.away_team : g.home_team)} (${home ? "H" : "A"}) · ${g.home_score}–${g.away_score}</option>`;
+  }).join("");
+  sel.value = game ?? "";
+}
+document.getElementById("gamesel").addEventListener("change", e => {
+  game = +e.target.value || null; setURL(); drawActions(pid);
+});
 
 // colour = kind of action; series colours are the ones theme.css measured against the dark panel
 const GROUPS = [
@@ -267,10 +308,29 @@ const GROUPS = [
 const colourOf = t => (GROUPS.find(g => g[2].includes(t)) ?? [, "var(--muted)"])[1];  // keeper + rest: grey
 const HEADS = [...GROUPS.map(g => g[1]), "var(--muted)"];
 const MIN_ABS = 0.025;   // below this an action barely moves goal odds: left off the chart
-const drawn = () => acts.filter(a => Math.abs(a.v) >= MIN_ABS);
+const inGame = () => game ? acts.filter(a => a.g === game) : acts;
+const drawn = () => inGame().filter(a => Math.abs(a.v) >= MIN_ABS);
 
 const opponentOf = g => { const x = GAMES[g], mine = PLAYERS.find(p => p.team_id === team).team_name;
   return x ? (x.home_team === mine ? x.away_team : x.home_team) : "?"; };
+
+// touch heatmap: every on-ball action's start point, smoothed (Gaussian, 4 m) over 2.5 m cells.
+// Event data has no off-ball positions: this is where he had the ball, not where he stood.
+const HX = 42, HY = 28, CELL_X = PW / HX, CELL_Y = PH / HY, SIGMA = 4;
+function heatGrid(list){
+  const d = new Float64Array(HX * HY);
+  for(const a of list) for(let j = 0; j < HY; j++) for(let i = 0; i < HX; i++){
+    const dx = (i + .5) * CELL_X - a.x0, dy = (j + .5) * CELL_Y - a.y0;
+    d[j * HX + i] += Math.exp(-(dx * dx + dy * dy) / (2 * SIGMA * SIGMA));
+  }
+  const max = Math.max(...d);
+  return max ? d.map(v => v / max) : d;
+}
+
+// peak = top opacity: kept low so the action lines on top stay readable
+const heatCells = (list, peak) => [...heatGrid(list)].map((v, k) => v < .04 ? "" :  // faint tail left off: stray touches read as noise
+  `<rect x="${X((k % HX) * CELL_X)}" y="${Y((Math.floor(k / HX) + 1) * CELL_Y)}" width="${(CELL_X * S + .4).toFixed(1)}"
+    height="${(CELL_Y * S + .4).toFixed(1)}" fill="var(--amber)" fill-opacity="${(peak * v ** .8).toFixed(2)}"/>`).join("");
 
 function drawActions(pid){
   const p = PLAYERS.find(q => q.player_id === pid && q.team_id === team);
@@ -291,14 +351,20 @@ function drawActions(pid){
     `<marker id="h-${k}-${q}" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse"
       markerWidth="${5 * q / 4}" markerHeight="${5 * q / 4}" orient="auto"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`)).join("");
   document.getElementById("actmap").innerHTML = `<svg viewBox="0 0 ${W} ${H + 18}" id="actsvg"
-    aria-label="Every action of the selected player this season, coloured by kind"><defs>${heads}</defs>
-    ${pitchLines()}${lines}<text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
+    aria-label="Every action of the selected player, coloured by kind, over a heatmap of where he touched the ball"><defs>${heads}</defs>
+    ${heatCells(inGame(), .55)}${pitchLines()}${lines}
+    <text x="${W - M}" y="${H + 12}" text-anchor="end">attacking →</text></svg>`;
 
   const total = shown.reduce((s, a) => s + a.v, 0);
-  const hidden = acts.length - drawn().length;
-  document.getElementById("actmeta").textContent = `· ${p?.player_name ?? ""} · ${shown.length.toLocaleString()} actions drawn` +
+  const hidden = inGame().length - shown.length;
+  const g = game && GAMES[game];
+  document.getElementById("actmeta").textContent = `· ${p?.player_name ?? ""}` +
+    (g ? ` · ${g.game_date} vs ${opponentOf(game)}` : "") +
+    ` · ${shown.length.toLocaleString()} actions drawn` +
     ` (${hidden.toLocaleString()} under ±${MIN_ABS} left off) · value ${f1(total)}` +
-    (p && p.minutes ? ` · ${(total / p.minutes * 90).toFixed(2)} per 90` : "");
+    // per 90 needs his minutes: known per season only, so a single match shows the total alone
+    (!g && p && p.minutes ? ` · ${(total / p.minutes * 90).toFixed(2)} per 90` : "") +
+    ` · heat from ${inGame().length.toLocaleString()} touches (on the ball only)`;
 
   const svg = document.getElementById("actsvg");
   svg.addEventListener("mousemove", e => {
@@ -337,13 +403,15 @@ function drawTable(){
       <td>${f1(r.value)}</td></tr>`).join("")}</tbody></table>`;
 }
 
-function selectTeam(id){
+function selectTeam(id, askedPid = 0, askedGame = 0){
   team = id;
-  history.replaceState(null, "", `?lg=${league}&team=${id}`);
   drawTable(); drawZones();
-  // open on whoever added the most value (top of the list)
-  const top = PLAYERS.filter(p => p.team_id === id && p.n_actions > 0).sort((a,b) => b.vaep_total - a.vaep_total)[0];
+  // open on the player the URL asks for, else whoever added the most value (top of the list)
+  const squad = PLAYERS.filter(p => p.team_id === id && p.n_actions > 0);
+  const top = squad.find(p => p.player_id === askedPid) ?? squad.sort((a,b) => b.vaep_total - a.vaep_total)[0];
   pid = top?.player_id ?? null;
+  game = askedGame || null;
+  setURL();
   drawSquad();
   if(top) loadPlayer(pid);
 }
@@ -360,19 +428,23 @@ function drawLeagueSelect(){
   document.getElementById("provnote").textContent = PROVIDERS[prov].note ?? "";
 }
 
-async function loadLeague(slug, askedTeam){
+async function loadLeague(slug, askedTeam, askedPid = 0, askedGame = 0){
   league = slug;
   drawLeagueSelect();
   try {
     let games;
     [PLAYERS, ZONES, games] = await Promise.all([getJSON("players.json"), getJSON("zones.json"), getJSON("games.json")]);
     GAMES = Object.fromEntries(games.map(g => [g.game_id, g]));
+    // a season in progress is rated on fewer games: say so with the real count
+    if (LEAGUES.find(l => l[0] === league)[3] === "whoscored" && games.length < 190)
+      document.getElementById("provnote").textContent += ` Only ${games.length} games so far: low confidence.`;
   } catch(err) {
     document.querySelectorAll(".empty").forEach(el => el.textContent = `Could not load data (${err.message}).`);
     return;
   }
   // open on the champions unless the URL asks for a team
-  selectTeam(PLAYERS.some(p => p.team_id === askedTeam) ? askedTeam : standings()[0].id);
+  const known = PLAYERS.some(p => p.team_id === askedTeam);
+  selectTeam(known ? askedTeam : standings()[0].id, known ? askedPid : 0, known ? askedGame : 0);
 }
 
 const tableEl = document.getElementById("table");
@@ -384,7 +456,8 @@ tableEl.addEventListener("keydown", e => {
 document.getElementById("lgsel").addEventListener("change", e => loadLeague(e.target.value));
 
 const q = new URLSearchParams(location.search);
-loadLeague(LEAGUES.some(l => l[0] === q.get("lg")) ? q.get("lg") : LEAGUES[0][0], +q.get("team"));
+loadLeague(LEAGUES.some(l => l[0] === q.get("lg")) ? q.get("lg") : LEAGUES[0][0], +q.get("team"),
+           +q.get("player"), +q.get("game"));
 </script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-WMVWTJ7M4X"></script>
 <script>

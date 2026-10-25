@@ -10,8 +10,12 @@ from soccerhub.cache import cached_fetch
 from soccerhub.manifest import Manifest
 
 
-def fetch_spadl_season(source, params, make_loader, games_of, actions_of, players_of, force=False) -> dict[str, Manifest]:
-    """Games, SPADL actions and player minutes for one competition-season."""
+def fetch_spadl_season(source, params, make_loader, games_of, actions_of, players_of, force=False,
+                       refresh=False) -> dict[str, Manifest]:
+    """Games, SPADL actions and player minutes for one competition-season.
+
+    refresh = season in progress: re-list games and re-stack, but build only new games.
+    """
     loader = None
 
     def get_loader():
@@ -19,7 +23,7 @@ def fetch_spadl_season(source, params, make_loader, games_of, actions_of, player
         loader = loader or make_loader()  # only built on a cache miss
         return loader
 
-    games_m = cached_fetch(source, "games", params, lambda: games_of(get_loader()), force)
+    games_m = cached_fetch(source, "games", params, lambda: games_of(get_loader()), force or refresh)
     games = pd.read_parquet(games_m.path)
 
     paths = []
@@ -34,8 +38,8 @@ def fetch_spadl_season(source, params, make_loader, games_of, actions_of, player
 
     return {
         "games": games_m,
-        "actions": cached_fetch(source, "actions", params, stack(0), force),
-        "players": cached_fetch(source, "players", params, stack(1), force),
+        "actions": cached_fetch(source, "actions", params, stack(0), force or refresh),
+        "players": cached_fetch(source, "players", params, stack(1), force or refresh),
     }
 
 

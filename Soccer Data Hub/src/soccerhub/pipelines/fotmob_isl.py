@@ -275,30 +275,38 @@ def push_fotmob_new(league: str) -> dict[str, int]:
     return push_fotmob(league, season, match_ids=new)
 
 
-def link_fotmob(league: str, season: str) -> tuple[int, int]:
-    """Big-5: set player_season.fotmob_id on existing FBref rows. Returns (linked, hub_rows).
+def link_ids(us: pd.DataFrame, league: str, season: str, cols: dict[str, str]) -> tuple[int, int]:
+    """Set a source's player id on existing Big-5 player_season rows. Returns (linked, hub_rows).
 
-    Reuses the Understat matcher (name, then movers by minutes, then fuzzy with a minutes
-    guard; ties rejected). Team names aren't compared: FotMob and FBref spell clubs
-    differently, and minutes already separate the candidates.
+    `us`: one row per source player-stint (player, minutes, id column). Reuses the Understat
+    matcher (name, then movers by minutes, then fuzzy with a minutes guard; ties rejected).
+    Team names aren't compared: each source spells clubs differently, minutes separate them.
     """
     from soccerhub import pipelines as P
     from soccerhub.pipelines import query, supa
     from soccerhub.pipelines.understat import match_players
 
-    pm = query.read_hub("player_match", select="match_id,fotmob_id,team,player_name,minutes",
-                        league=league, season=season)
     hub = query.read_hub("player_season", select="league,season,team,player_name,minutes",
                          league=league, season=season)
-    if pm.empty or hub.empty:
+    if us.empty or hub.empty:
         return (0, len(hub))
-    # offset paging in read_hub has no ORDER BY: a repeated row would add a match's minutes
-    us = (pm.drop_duplicates(["match_id", "fotmob_id"]).groupby(["fotmob_id", "team"], as_index=False)
-            .agg(player=("player_name", "first"), minutes=("minutes", "sum")))
-    matched = match_players(us, hub, cols={"fotmob_id": "fotmob_id"})
+    matched = match_players(us, hub, cols=cols)
     if len(matched):
         supa.upsert_df(matched, "player_season", P.CONFLICT_KEY_PLAYER_SEASON)
     return (len(matched), len(hub))
+
+
+def link_fotmob(league: str, season: str) -> tuple[int, int]:
+    """Big-5: player_season.fotmob_id from stored player_match minutes."""
+    from soccerhub.pipelines import query
+
+    pm = query.read_hub("player_match", select="match_id,fotmob_id,team,player_name,minutes",
+                        league=league, season=season)
+    # offset paging in read_hub has no ORDER BY: a repeated row would add a match's minutes
+    us = pm if pm.empty else (
+        pm.drop_duplicates(["match_id", "fotmob_id"]).groupby(["fotmob_id", "team"], as_index=False)
+          .agg(player=("player_name", "first"), minutes=("minutes", "sum")))
+    return link_ids(us, league, season, {"fotmob_id": "fotmob_id"})
 
 
 def push_isl(season: str, force: bool = False, match_ids: list[int] | None = None) -> dict[str, int]:

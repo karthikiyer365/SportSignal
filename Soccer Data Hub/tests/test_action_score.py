@@ -198,13 +198,15 @@ def test_force_rerates_without_refetching_games(season, monkeypatch):
 
 
 def test_each_league_season_exports_to_its_own_folder():
-    """9 league-seasons (4 StatsBomb 2015/16 + 5 Wyscout 2017/18) never overwrite each other."""
+    """19 league-seasons (4 StatsBomb 2015/16 + 5 Wyscout 2017/18 + 10 WhoScored 2025-26)."""
     from soccerhub.pipelines.action_score import LEAGUE_SEASONS, site_dir
 
     dirs = {site_dir(league, season) for league, season in LEAGUE_SEASONS}
-    assert len(dirs) == 9
+    assert len(dirs) == 19
     assert site_dir("GER-Bundesliga", "2017").name == "ger-bundesliga-2017"
-    assert {p for p, _, _ in LEAGUE_SEASONS.values()} == {"statsbomb", "wyscout"}
+    assert {p for p, _, _ in LEAGUE_SEASONS.values()} == {"statsbomb", "wyscout", "whoscored"}
+    ws = {k: v for k, v in LEAGUE_SEASONS.items() if v[0] == "whoscored"}
+    assert len(ws) == 10 and ws[("GER-Bundesliga", "2026")] == ("whoscored", "GER-Bundesliga", "2627")
 
 
 def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypatch):
@@ -253,8 +255,9 @@ def test_cli_filter_means_league_and_season():
 
     assert selected(["ENG-Premier League", "2015"]) == [("ENG-Premier League", "2015")]
     assert len(selected(["2017"])) == 5
-    assert selected(["ESP-La Liga"]) == [("ESP-La Liga", "2015"), ("ESP-La Liga", "2017")]
-    assert len(selected([])) == 9
+    assert selected(["ESP-La Liga"]) == [("ESP-La Liga", "2015"), ("ESP-La Liga", "2017"),
+                                         ("ESP-La Liga", "2025"), ("ESP-La Liga", "2026")]
+    assert len(selected([])) == 19
 
 
 def test_upload_retries_a_dropped_connection(tmp_path, monkeypatch):
@@ -280,3 +283,104 @@ def test_upload_retries_a_dropped_connection(tmp_path, monkeypatch):
     monkeypatch.setattr(a.time, "sleep", lambda s: None)
     assert a.upload_player_actions(league) == 1
     assert len(calls) == 2
+
+
+def test_whoscored_dispatches_to_whoscored_reader_and_refresh_rerates(season, monkeypatch):
+    from soccerhub.manifest import Manifest
+    from soccerhub.pipelines import action_score as a
+
+    games, actions, players = season
+    paths = {}
+    for name, df in {"games": games, "actions": actions, "players": players}.items():
+        path = Path(os.environ["SOCCERHUB_CACHE"]) / f"{name}.parquet"
+        df.to_parquet(path)
+        paths[name] = Manifest(str(path), "fake", name, {}, len(df), len(df.columns), None, "")
+    called, rated = [], []
+    monkeypatch.setattr(a, "fetch_whoscored_spadl",
+                        lambda c, s, refetch=False, refresh=False: called.append((c, s, refresh)) or paths)
+    real_rate = a.rate_out_of_fold
+    monkeypatch.setattr(a, "rate_out_of_fold", lambda *x, **k: rated.append(1) or real_rate(*x, **k))
+
+    a.build_action_score("ENG-Premier League", "2627", provider="whoscored")
+    a.build_action_score("ENG-Premier League", "2627", provider="whoscored", refresh=True)
+    assert called == [("ENG-Premier League", "2627", False), ("ENG-Premier League", "2627", True)]
+    assert len(rated) == 2  # refresh re-rates: new games change every value
+
+
+def test_refresh_current_runs_latest_whoscored_season_and_uploads_tables(monkeypatch, tmp_path):
+    from soccerhub.pipelines import action_score as a
+
+    seen = {}
+    monkeypatch.setattr(a, "_rate_and_export", lambda league, season, **k: seen.update(ls=(league, season), **k) or 42)
+    monkeypatch.setattr(a, "upload_player_actions", lambda d, with_tables=False: seen.update(tables=with_tables) or 7)
+    assert a.refresh_current("ITA-Serie A", "2026") == {"games_total": 42, "upload": 7}
+    assert seen["ls"] == ("ITA-Serie A", "2026") and seen["refresh"] is True and seen["tables"] is True
+
+
+def test_refresh_current_skips_a_season_without_whoscored_data(monkeypatch):
+    from soccerhub.pipelines import action_score as a
+
+    monkeypatch.setattr(a, "_rate_and_export", lambda *x, **k: pytest.fail("must not rate"))
+    assert a.refresh_current("ITA-Serie A", "2027") == {"skipped": "no WhoScored season ITA-Serie A 2027"}
+
+
+def test_upload_with_tables_also_sends_season_json(tmp_path, monkeypatch):
+    from soccerhub.pipelines import action_score as a
+
+    league = tmp_path / "ita-serie-a-2026"
+    (league / "player_actions").mkdir(parents=True)
+    (league / "player_actions" / "1.json").write_text("{}")
+    for t in ("players", "zones", "games"):
+        (league / f"{t}.json").write_text("[]")
+    sent = []
+
+    class Bucket:
+        def upload(self, path, file, file_options):
+            sent.append(path)
+
+    monkeypatch.setattr(a, "_storage", lambda: type("S", (), {"from_": lambda self, n: Bucket()})())
+    assert a.upload_player_actions(league, with_tables=True) == 4
+    assert "ita-serie-a-2026/players.json" in sent and "ita-serie-a-2026/player_actions/1.json" in sent
+
+
+def test_link_whoscored_sets_whoscored_id_only(monkeypatch, tmp_path):
+    from soccerhub.manifest import Manifest
+    from soccerhub.pipelines import action_score as a
+    from soccerhub.pipelines import query, supa
+
+    players = pd.DataFrame({"game_id": [1, 2], "team_id": [32, 32], "team_name": ["Man Utd"] * 2,
+                            "player_id": [77, 77], "player_name": ["Bruno Fernandes"] * 2,
+                            "minutes_played": [90, 90]})
+    path = tmp_path / "players.parquet"
+    players.to_parquet(path)
+    m = Manifest(str(path), "fake", "players", {}, 2, 6, None, "")
+    monkeypatch.setattr(a, "fetch_whoscored_spadl", lambda c, s, refetch=False, refresh=False: {"players": m})
+    monkeypatch.setattr(query, "read_hub", lambda table, select="*", **eq: pd.DataFrame(
+        [["ENG-Premier League", "2025", "Manchester Utd", "Bruno Fernandes", 180]],
+        columns=["league", "season", "team", "player_name", "minutes"]))
+    upserted = {}
+    monkeypatch.setattr(supa, "upsert_df", lambda df, table, key: upserted.setdefault(table, df) is not None and len(df))
+
+    assert a.link_whoscored("ENG-Premier League", "2025") == (1, 1)
+    df = upserted["player_season"]
+    assert set(df.columns) == {"league", "season", "team", "player_name", "whoscored_id"}
+    assert df.whoscored_id.tolist() == [77]
+
+
+def test_link_whoscored_skips_a_season_without_whoscored_data(monkeypatch):
+    from soccerhub.pipelines import action_score as a
+
+    monkeypatch.setattr(a, "fetch_whoscored_spadl", lambda *x, **k: pytest.fail("must not fetch"))
+    assert a.link_whoscored("ITA-Serie A", "2027") == (0, 0)
+
+
+def test_player_file_survives_an_action_with_no_end_point():
+    """Opta logs a few dribbles with no end (9 of 596k in PL 2025/26): draw them as zero-length."""
+    from soccerhub.pipelines.action_score import _player_file
+
+    df = pd.DataFrame({"type_name": ["dribble", "pass"], "game_id": [1, 1], "time_seconds": [10.0, 70.0],
+                       "period_id": [1, 1], "result_name": ["success", "fail"],
+                       "start_x": [40.2, 50.0], "start_y": [20.6, 30.0], "end_x": [np.nan, 60.0],
+                       "end_y": [np.nan, 35.0], "vaep_value": [0.01, -0.02]})
+    f = _player_file(df)
+    assert f["x1"] == [40, 60] and f["y1"] == [21, 35]
