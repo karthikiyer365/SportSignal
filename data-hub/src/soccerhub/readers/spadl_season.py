@@ -1,4 +1,4 @@
-"""Shared season loop for the SPADL readers (StatsBomb, Wyscout).
+"""Season loop for the WhoScored SPADL reader.
 
 Each game is cached on its own, so a dropped connection at game 200 resumes
 at game 200 instead of starting over. The provider reader supplies how to

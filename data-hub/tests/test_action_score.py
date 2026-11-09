@@ -186,34 +186,32 @@ def test_force_rerates_without_refetching_games(season, monkeypatch):
         df.to_parquet(path)
         paths[name] = Manifest(str(path), "fake", name, {}, len(df), len(df.columns), None, "")
     fetch_force, rated = [], []
-    monkeypatch.setattr(a, "fetch_statsbomb_spadl",
-                        lambda c, s, refetch=False: fetch_force.append(refetch) or paths)
+    monkeypatch.setattr(a, "fetch_whoscored_spadl",
+                        lambda c, s, refetch=False, refresh=False: fetch_force.append(refetch) or paths)
     real_rate = a.rate_out_of_fold
     monkeypatch.setattr(a, "rate_out_of_fold", lambda *x, **k: rated.append(1) or real_rate(*x, **k))
 
-    a.build_action_score(force=False)
-    a.build_action_score(force=True)
+    a.build_action_score("ENG-Premier League", "2526", force=False)
+    a.build_action_score("ENG-Premier League", "2526", force=True)
     assert fetch_force == [False, False]
     assert len(rated) == 2
 
 
 def test_each_league_season_exports_to_its_own_folder():
-    """19 league-seasons (4 StatsBomb 2015/16 + 5 Wyscout 2017/18 + 10 WhoScored 2025-26)."""
+    """10 WhoScored league-seasons: Big 5 x 2025/26, 2026/27."""
     from soccerhub.pipelines.action_score import LEAGUE_SEASONS, site_dir
 
     dirs = {site_dir(league, season) for league, season in LEAGUE_SEASONS}
-    assert len(dirs) == 19
-    assert site_dir("GER-Bundesliga", "2017").name == "ger-bundesliga-2017"
-    assert {p for p, _, _ in LEAGUE_SEASONS.values()} == {"statsbomb", "wyscout", "whoscored"}
-    ws = {k: v for k, v in LEAGUE_SEASONS.items() if v[0] == "whoscored"}
-    assert len(ws) == 10 and ws[("GER-Bundesliga", "2026")] == ("whoscored", "GER-Bundesliga", "2627")
+    assert len(dirs) == 10
+    assert site_dir("GER-Bundesliga", "2026").name == "ger-bundesliga-2026"
+    assert LEAGUE_SEASONS[("GER-Bundesliga", "2026")] == ("GER-Bundesliga", "2627")
 
 
 def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypatch):
     """Upload keeps the league folder in the object path and overwrites on re-run."""
     from soccerhub.pipelines import action_score as a
 
-    league = tmp_path / "eng-premier-league-2015"
+    league = tmp_path / "eng-premier-league-2025"
     (league / "player_actions").mkdir(parents=True)
     for pid in (100, 200):
         (league / "player_actions" / f"{pid}.json").write_text("{}")
@@ -231,13 +229,13 @@ def test_upload_player_actions_puts_every_file_in_the_bucket(tmp_path, monkeypat
     monkeypatch.setattr(a, "_storage", lambda: Storage())
     assert a.upload_player_actions(league) == 2
     assert sorted(sent) == [
-        ("eng-premier-league-2015/player_actions/100.json", "true", "application/json"),
-        ("eng-premier-league-2015/player_actions/200.json", "true", "application/json"),
+        ("eng-premier-league-2025/player_actions/100.json", "true", "application/json"),
+        ("eng-premier-league-2025/player_actions/200.json", "true", "application/json"),
     ]
 
 
 def test_unknown_player_placeholder_is_not_a_player(season):
-    """Wyscout files unattributed actions under player_id 0: they count for the team, not as a player."""
+    """Unattributed actions sit under player_id 0: they count for the team, not as a player."""
     from soccerhub.pipelines.action_score import attack_left_to_right, player_table, rate_out_of_fold
 
     games, actions, players = season
@@ -250,21 +248,20 @@ def test_unknown_player_placeholder_is_not_a_player(season):
 
 
 def test_cli_filter_means_league_and_season():
-    """`action_score "ENG-Premier League" 2015` must pick exactly one league-season, not either."""
+    """`action_score "ENG-Premier League" 2025` must pick exactly one league-season, not either."""
     from soccerhub.pipelines.action_score import selected
 
-    assert selected(["ENG-Premier League", "2015"]) == [("ENG-Premier League", "2015")]
-    assert len(selected(["2017"])) == 5
-    assert selected(["ESP-La Liga"]) == [("ESP-La Liga", "2015"), ("ESP-La Liga", "2017"),
-                                         ("ESP-La Liga", "2025"), ("ESP-La Liga", "2026")]
-    assert len(selected([])) == 19
+    assert selected(["ENG-Premier League", "2025"]) == [("ENG-Premier League", "2025")]
+    assert len(selected(["2026"])) == 5
+    assert selected(["ESP-La Liga"]) == [("ESP-La Liga", "2025"), ("ESP-La Liga", "2026")]
+    assert len(selected([])) == 10
 
 
 def test_upload_retries_a_dropped_connection(tmp_path, monkeypatch):
     """One TLS blip must not kill a 4,800-file upload."""
     from soccerhub.pipelines import action_score as a
 
-    league = tmp_path / "eng-premier-league-2015"
+    league = tmp_path / "eng-premier-league-2025"
     (league / "player_actions").mkdir(parents=True)
     (league / "player_actions" / "100.json").write_text("{}")
     calls = []
@@ -285,7 +282,7 @@ def test_upload_retries_a_dropped_connection(tmp_path, monkeypatch):
     assert len(calls) == 2
 
 
-def test_whoscored_dispatches_to_whoscored_reader_and_refresh_rerates(season, monkeypatch):
+def test_build_calls_whoscored_reader_and_refresh_rerates(season, monkeypatch):
     from soccerhub.manifest import Manifest
     from soccerhub.pipelines import action_score as a
 
@@ -301,8 +298,8 @@ def test_whoscored_dispatches_to_whoscored_reader_and_refresh_rerates(season, mo
     real_rate = a.rate_out_of_fold
     monkeypatch.setattr(a, "rate_out_of_fold", lambda *x, **k: rated.append(1) or real_rate(*x, **k))
 
-    a.build_action_score("ENG-Premier League", "2627", provider="whoscored")
-    a.build_action_score("ENG-Premier League", "2627", provider="whoscored", refresh=True)
+    a.build_action_score("ENG-Premier League", "2627")
+    a.build_action_score("ENG-Premier League", "2627", refresh=True)
     assert called == [("ENG-Premier League", "2627", False), ("ENG-Premier League", "2627", True)]
     assert len(rated) == 2  # refresh re-rates: new games change every value
 

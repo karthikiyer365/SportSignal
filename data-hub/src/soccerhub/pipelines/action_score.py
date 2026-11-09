@@ -14,27 +14,14 @@ import pandas as pd
 
 from soccerhub.cache import cached_fetch
 from soccerhub.manifest import Manifest
-from soccerhub.readers.statsbomb_spadl import fetch_statsbomb_spadl
 from soccerhub.readers.whoscored_spadl import fetch_whoscored_spadl
-from soccerhub.readers.wyscout_spadl import fetch_wyscout_spadl
 
-# Every complete top-5 league-season in open event data: (league, season start) -> (provider, ids).
-# StatsBomb 2015/16: Bundesliga is Leverkusen-only, so left out. Wyscout 2017/18: all five.
-# One model per league-season; providers log events differently, so never compare across them.
+# WhoScored (Opta) league-seasons: (league, season start) -> soccerdata's (league name, season code).
+# One model per league-season; a new season is one more (start, code) pair.
 LEAGUE_SEASONS = {
-    ("ENG-Premier League", "2015"): ("statsbomb", 2, 27),
-    ("ESP-La Liga", "2015"): ("statsbomb", 11, 27),
-    ("ITA-Serie A", "2015"): ("statsbomb", 12, 27),
-    ("FRA-Ligue 1", "2015"): ("statsbomb", 7, 27),
-    ("ENG-Premier League", "2017"): ("wyscout", 364, 181150),
-    ("ESP-La Liga", "2017"): ("wyscout", 795, 181144),
-    ("ITA-Serie A", "2017"): ("wyscout", 524, 181248),
-    ("FRA-Ligue 1", "2017"): ("wyscout", 412, 181189),
-    ("GER-Bundesliga", "2017"): ("wyscout", 426, 181137),
-    # WhoScored (Opta), current seasons: ids are soccerdata's league name and season code
-    **{(lg, s): ("whoscored", lg, code)
-       for lg in ("ENG-Premier League", "ESP-La Liga", "GER-Bundesliga", "ITA-Serie A", "FRA-Ligue 1")
-       for s, code in (("2025", "2526"), ("2026", "2627"))},
+    (lg, s): (lg, code)
+    for lg in ("ENG-Premier League", "ESP-La Liga", "GER-Bundesliga", "ITA-Serie A", "FRA-Ligue 1")
+    for s, code in (("2025", "2526"), ("2026", "2627"))
 }
 MIN_MINUTES_RANK = 900  # guess, not derived: revisit after the reliability check
 MIN_MINUTES_HALF = 450  # reliability check: minutes needed in each fold
@@ -47,7 +34,7 @@ SITE_DIR = Path(__file__).resolve().parents[4] / "site" / "data" / "action_score
 
 
 def site_dir(league: str, season: str) -> Path:
-    """One folder per league-season, e.g. site/data/action_score/esp-la-liga-2015."""
+    """One folder per league-season, e.g. site/data/action_score/esp-la-liga-2025."""
     return SITE_DIR / f"{league.lower().replace(' ', '-')}-{season}"
 
 
@@ -115,7 +102,7 @@ def attack_left_to_right(actions: pd.DataFrame, games: pd.DataFrame) -> pd.DataF
     ).loc[actions.index]
 
 
-UNKNOWN_PLAYER = 0  # Wyscout files unattributed actions under player_id 0: team value, not a player
+UNKNOWN_PLAYER = 0  # player_id 0 = unattributed action: team value, not a player
 
 
 def player_table(rated: pd.DataFrame, players: pd.DataFrame) -> pd.DataFrame:
@@ -273,28 +260,23 @@ def upload_player_actions(league_dir, with_tables: bool = False) -> int:
 LIABILITIES = """\
 Liabilities (read before quoting any number):
 - Model dependence: one model per league-season, one learner (xgboost), 2-fold out-of-fold.
-- Provider: StatsBomb (2015/16), Wyscout (2017/18) and WhoScored/Opta (2025-) log events differently;
-  never compare across. A season in progress is rated on fewer games: low confidence before 190.
+- Source: WhoScored match centre (Opta events). A season in progress is rated on fewer games:
+  low confidence before 190.
 - Blind spots: undervalues defending; off-ball runs are invisible.
 - Team style inflates players: Leicester's counter-attacking shapes their numbers.
 - Meaning: "what he added on the ball this season", not "how good he is"."""
 
 
 def build_action_score(
-    competition_id: int = 2, season_id: int = 27, force: bool = False, refetch: bool = False,
-    provider: str = "statsbomb", refresh: bool = False,
+    league: str, season_code: str, force: bool = False, refetch: bool = False, refresh: bool = False,
 ) -> dict[str, Manifest]:
     """force = re-run the model (minutes); refetch = re-download every game (20-40 min);
     refresh = season in progress: fetch only new games, then re-run the model.
 
     The ratings cache key has no code version: after changing the model, folds or zones, pass force=True.
     """
-    if provider == "whoscored":
-        src = fetch_whoscored_spadl(competition_id, season_id, refetch, refresh)
-    else:
-        fetch = fetch_wyscout_spadl if provider == "wyscout" else fetch_statsbomb_spadl
-        src = fetch(competition_id, season_id, refetch)  # provider ids never overlap, so cache keys don't either
-    params = {"competition_id": competition_id, "season_id": season_id}
+    src = fetch_whoscored_spadl(league, season_code, refetch, refresh)
+    params = {"competition_id": league, "season_id": season_code}  # key names kept: existing cache stays valid
     games = pd.read_parquet(src["games"].path)
     actions_m = cached_fetch(
         "action_score", "actions_vaep", params,
@@ -313,9 +295,8 @@ def selected(only) -> list[tuple[str, str]]:
 
 def _rate_and_export(league: str, season: str, force: bool = False, refresh: bool = False) -> int:
     """Rate one league-season, print its validation, write its site files. Returns games rated."""
-    provider, competition_id, season_id = LEAGUE_SEASONS[(league, season)]
-    print(f"\n===== {league} {season}/{int(season[2:]) + 1} ({provider}) =====")
-    m = build_action_score(competition_id, season_id, force=force, provider=provider, refresh=refresh)
+    print(f"\n===== {league} {season}/{int(season[2:]) + 1} =====")
+    m = build_action_score(*LEAGUE_SEASONS[(league, season)], force=force, refresh=refresh)
     games, players = pd.read_parquet(m["games"].path), pd.read_parquet(m["players"].path)
     rated = pd.read_parquet(m["actions_vaep"].path)
     table = player_table(rated, players)  # one groupby: cheap, so never cached and never stale
@@ -338,8 +319,7 @@ def main(force: bool = False, only=(), upload: bool = False):
     for league, season in selected(only):
         _rate_and_export(league, season, force=force)
         if upload:
-            tables = LEAGUE_SEASONS[(league, season)][0] == "whoscored"
-            print("uploaded files:", upload_player_actions(site_dir(league, season), with_tables=tables))
+            print("uploaded files:", upload_player_actions(site_dir(league, season), with_tables=True))
     print(LIABILITIES)
 
 
@@ -347,9 +327,9 @@ def link_whoscored(league: str, season: str) -> tuple[int, int]:
     """player_season.whoscored_id from the season's WhoScored player minutes (cached fetch)."""
     from soccerhub.pipelines.fotmob_isl import link_ids
 
-    if LEAGUE_SEASONS.get((league, season), ("",))[0] != "whoscored":
+    if (league, season) not in LEAGUE_SEASONS:
         return (0, 0)
-    _, comp, code = LEAGUE_SEASONS[(league, season)]
+    comp, code = LEAGUE_SEASONS[(league, season)]
     players = pd.read_parquet(fetch_whoscored_spadl(comp, code)["players"].path)
     us = (players.groupby(["player_id", "team_name"], as_index=False)
                  .agg(player=("player_name", "first"), minutes=("minutes_played", "sum")))
@@ -362,7 +342,7 @@ def refresh_current(league: str, season: str) -> dict:
     Takes the caller's season so the refresh and the link always agree; a season with no
     WhoScored entry (e.g. next August before LEAGUE_SEASONS is extended) is skipped, not failed.
     """
-    if LEAGUE_SEASONS.get((league, season), ("",))[0] != "whoscored":
+    if (league, season) not in LEAGUE_SEASONS:
         return {"skipped": f"no WhoScored season {league} {season}"}
     games = _rate_and_export(league, season, refresh=True)
     return {"games_total": games, "upload": upload_player_actions(site_dir(league, season), with_tables=True)}
@@ -371,6 +351,6 @@ def refresh_current(league: str, season: str) -> dict:
 if __name__ == "__main__":
     import sys
 
-    # python -m soccerhub.pipelines.action_score [--force] [--upload] ["ESP-La Liga" | 2017 ...]
+    # python -m soccerhub.pipelines.action_score [--force] [--upload] ["ESP-La Liga" | 2025 ...]
     main(force="--force" in sys.argv, only=[a for a in sys.argv[1:] if not a.startswith("--")],
          upload="--upload" in sys.argv)

@@ -7,7 +7,6 @@ from soccerhub.readers.clubelo import fetch_club_elo_history, fetch_club_elo_sna
 from soccerhub.readers.fbref import fetch_fbref_season
 from soccerhub.readers.matchhistory import fetch_match_history
 from soccerhub.readers.statsbomb import fetch_statsbomb_events
-from soccerhub.readers.statsbomb_spadl import fetch_statsbomb_spadl
 from soccerhub.readers.transfermarkt import (
     fetch_transfermarkt_players,
     fetch_transfermarkt_transfers,
@@ -51,7 +50,6 @@ __all__ = [
     "fetch_fbref_season",
     "fetch_match_history",
     "fetch_statsbomb_events",
-    "fetch_statsbomb_spadl",
     "fetch_transfermarkt_players",
     "fetch_transfermarkt_transfers",
     "fetch_transfermarkt_values",

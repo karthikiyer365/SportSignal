@@ -15,7 +15,6 @@ and WhoScored work; this file is the current reference until that map is regener
 | ClubElo | HTTP | Actions · Mon | `push_club_elo` | `club_elo` |
 | **FotMob** | JSON API, 2 s between calls | launchd · ISL Tue, Big-5 own day | `push_fotmob_new`, `link_fotmob` | ISL: `matches`, `shots_understat`, `team_match_understat`, `player_season`. ISL + Big-5: `player_match`, `player_season.fotmob_id`. Raw JSON → `fotmob` bucket |
 | **WhoScored (Opta)** | soccerdata, real Chrome (Cloudflare) | launchd · Big-5 own day | `whoscored_spadl` → `action_score` VAEP, `refresh_current`, `link_whoscored` | `action-score` bucket, `player_season.whoscored_id` |
-| StatsBomb · Wyscout open | files | manual, one-off | `action_score` (2015/16, 2017/18) | `site/data/action_score` (git) + `action-score` bucket |
 | Baseball Savant | CSV | manual | `pipelines/statcast.py` | `pitch_arsenal`, `statcast` bucket |
 | `player_season` (derived) | — | launchd · end of each day | `push_age_curve` | `age_curve` |
 
@@ -32,7 +31,7 @@ site/ (Netlify, static)  ── PostgREST, anon key, RLS select-only ──>  Po
 player.html    player_season · shots_understat · transfers · age_curve · /api/ask
 match.html     matches · club_elo
 baseball.html  pitch_arsenal
-team.html      action-score bucket (WhoScored seasons) · site/data/action_score (StatsBomb/Wyscout)
+team.html      action-score bucket (WhoScored seasons)
 index.html     site/data/hero.json (scripts/build_hero.py)
 /api/ask       Netlify proxy → Render soccerhub-agent (FastAPI + Gemini) → read_hub (anon)
 ```
@@ -95,7 +94,7 @@ own way ("Freiburg" / "SC Freiburg").
 | `matches` | table | 33k · 8.8 MB |
 | `pitch_arsenal` | table | 19k · 5 MB |
 | `team_match_understat` | table | 4.6 MB |
-| `action-score` | public bucket | 277 MB (WhoScored folders 109 MB) |
+| `action-score` | public bucket | ~100 MB after the 2015/16 + 2017/18 folders are deleted (were 177 MB) |
 | `statcast` | public bucket | 259 MB |
 | `fotmob` | private bucket | 250 MB |
 
@@ -105,7 +104,7 @@ Check both with a SELECT before adding anything large.
 
 ## Data caveats
 
-- FotMob xG ≠ Understat xG ≠ StatsBomb/Wyscout/Opta VAEP. Filter by `league` (and provider)
+- FotMob xG ≠ Understat xG; VAEP is Opta (WhoScored) only. Filter by `league` (and provider)
   before comparing; `shots_understat.player_id` is a FotMob id for ISL rows and an
   Understat id for Big-5 rows.
 - ISL rows keep the team name as of each match (2021/22 Hyderabad FC, now SC Delhi);

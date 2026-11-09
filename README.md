@@ -6,7 +6,7 @@ Football (soccer) data and analytics projects. Current data flow, schedule and s
 
 ```
 FBref · Understat · Transfermarkt · football-data · ClubElo · FotMob · WhoScored (Opta)
-StatsBomb/Wyscout open · Baseball Savant
+Baseball Savant
         │  soccerhub readers (fetch → parquet cache → manifest)
         v
   pipelines: xref → player_season · player_match · shots · VAEP (action_score) · links
@@ -37,8 +37,7 @@ Python package: unified fetch layer + pipelines for open football data, into Sup
 - Big 5: 18 seasons (2008–) of player season stats, market values and transfers, entity-resolved
   across FBref and Transfermarkt; Understat xG and shots (2014–).
 - Per-match player stats from FotMob for the Big 5 and the **Indian Super League**, 2021/22 →.
-- On-ball action values (VAEP) from StatsBomb 2015/16, Wyscout 2017/18 and **WhoScored (Opta)
-  2025/26 → current season**.
+- On-ball action values (VAEP) from **WhoScored (Opta)**, 2025/26 → current season.
 
 See [`data-hub/README.md`](data-hub/README.md).
 

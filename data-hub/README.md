@@ -44,7 +44,6 @@ a manifest dict — plus `hub_table` to query the Supabase source of truth
 | `fetch_transfermarkt_values(competition)` | Transfermarkt (pre-scraped) | player valuations |
 | `readers.fotmob.fetch_league / fetch_match` | FotMob JSON (ISL + Big 5) | fixtures, match details (gz cache + `fotmob` bucket archive) |
 | `readers.whoscored_spadl.fetch_whoscored_spadl(league, code)` | WhoScored / Opta (soccerdata, real Chrome) | SPADL actions + player minutes, finished games only |
-| `readers.statsbomb_spadl` · `readers.wyscout_spadl` | open event data | SPADL actions |
 
 Adding a source is one new file in `readers/` reusing `cached_fetch` — see
 `docs/specs/2026-07-14-soccerhub-data-layer-design.md`.
