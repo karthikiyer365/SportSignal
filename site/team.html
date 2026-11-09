@@ -113,18 +113,8 @@
 
 <script>
 const DATA = "data/action_score/";
-// one folder per league-season, written by soccerhub.pipelines.action_score.site_dir
 // [folder, league, season, provider] — folders written by soccerhub.pipelines.action_score.site_dir
 const LEAGUES = [
-  ["eng-premier-league-2015", "Premier League", "2015/16", "statsbomb"],
-  ["esp-la-liga-2015", "La Liga", "2015/16", "statsbomb"],
-  ["ita-serie-a-2015", "Serie A", "2015/16", "statsbomb"],
-  ["fra-ligue-1-2015", "Ligue 1", "2015/16", "statsbomb"],
-  ["eng-premier-league-2017", "Premier League", "2017/18", "wyscout"],
-  ["esp-la-liga-2017", "La Liga", "2017/18", "wyscout"],
-  ["ita-serie-a-2017", "Serie A", "2017/18", "wyscout"],
-  ["ger-bundesliga-2017", "Bundesliga", "2017/18", "wyscout"],
-  ["fra-ligue-1-2017", "Ligue 1", "2017/18", "wyscout"],
   ["eng-premier-league-2026", "Premier League", "2026/27", "whoscored"],
   ["esp-la-liga-2026", "La Liga", "2026/27", "whoscored"],
   ["ger-bundesliga-2026", "Bundesliga", "2026/27", "whoscored"],
@@ -138,18 +128,13 @@ const LEAGUES = [
 ];
 const PROVIDERS = {
   whoscored: {label: "WhoScored (Opta) · current", source: "WhoScored match centre (Opta event data)",
-    note: "Opta logs events differently from StatsBomb and Wyscout: not comparable across providers. A season in progress is rated on fewer games: treat values before ~190 games as low confidence."},
-  statsbomb: {label: "StatsBomb · 2015/16", source: 'StatsBomb open data'},
-  // CC BY 4.0 requires this credit
-  wyscout: {label: "Wyscout · 2017/18",
-    source: 'Wyscout public dataset, <a href="https://doi.org/10.1038/s41597-019-0247-7">Pappalardo et al. 2019</a>, CC BY 4.0',
-    note: "Wyscout logs almost no ball carries and counts tackles differently, so 2017/18 maps show far fewer yellow lines and are not comparable with 2015/16."},
+    note: "A season in progress is rated on fewer games: treat values before ~190 games as low confidence."},
 };
 // every-action files are ~22 MB a league, so they stay out of git: local copy on localhost,
 // public Supabase Storage bucket on the live site (uploaded by soccerhub upload_player_actions)
 const SUPABASE_URL = "https://rgnzemkdldohplwbxxwy.supabase.co";
 const ACTIONS_BASE = ["localhost", "127.0.0.1"].includes(location.hostname)
-  ? DATA : `${SUPABASE_URL}/storage/v1/object/public/action-score/`;  // Leicester City — the season's story
+  ? DATA : `${SUPABASE_URL}/storage/v1/object/public/action-score/`;
 let league = LEAGUES[0][0];
 const MIN_MINUTES_RANK = 900;     // same floor as the pipeline's ranking views
 // pitch in SPADL metres, drawn horizontally; team attacks left -> right.
@@ -165,9 +150,9 @@ const showTip = (e, html) => { const t=tipEl(); t.innerHTML=html; t.style.displa
   t.style.left=Math.min(e.clientX+14, innerWidth-200)+"px"; t.style.top=(e.clientY+14)+"px"; };
 const hideTip = () => tipEl().style.display="none";
 // re-exports overwrite files in place: revalidate every load (cheap 304 if unchanged), never serve a stale copy
-// WhoScored seasons refresh weekly, so their tables live in Storage, not git
-const getJSON = async path => { const base = LEAGUES.find(l => l[0] === league)[3] === "whoscored" ? ACTIONS_BASE : DATA;
-  const r = await fetch(`${base}${league}/${path}`, {cache: "no-cache"});
+// WhoScored seasons refresh weekly, so every file lives in Storage, not git
+const getJSON = async path => {
+  const r = await fetch(`${ACTIONS_BASE}${league}/${path}`, {cache: "no-cache"});
   if(!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const f1 = v => (v >= 0 ? "+" : "") + v.toFixed(1);
 const f2 = v => (v >= 0 ? "+" : "") + v.toFixed(2);

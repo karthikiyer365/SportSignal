@@ -55,11 +55,8 @@ output/
 
 # ── Website (hand-written, IS versioned) ──────────────────────────
 !site/**
-# every action per player (~22 MB per league): served locally, live copy in Supabase Storage
-site/data/action_score/*/player_actions/
-# WhoScored seasons refresh weekly: all their files live in Storage, not git
-site/data/action_score/*-2025/
-site/data/action_score/*-2026/
+# Team Analysis (WhoScored) files: written by soccerhub action_score, served from Supabase Storage
+site/data/action_score/
 
 # ── Local working notes (not versioned) ───────────────────────────
 /SOCCER_DS_BACKLOG.md
@@ -76,4 +73,4 @@ Thumbs.db
 skills-lock.json
 
 # seleniumbase creates this next to the hub when soccerdata drives Chrome
-Soccer Data Hub/downloaded_files/
+data-hub/downloaded_files/
