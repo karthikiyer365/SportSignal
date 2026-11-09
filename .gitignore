@@ -76,4 +76,4 @@ Thumbs.db
 skills-lock.json
 
 # seleniumbase creates this next to the hub when soccerdata drives Chrome
-Soccer Data Hub/downloaded_files/
+data-hub/downloaded_files/

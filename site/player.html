@@ -1325,7 +1325,7 @@ function renderAsk(body){
 
 // Renders the narrow markdown subset the agent's system prompt is locked to
 // (## headers, **bold**, - bullets, pipe tables). Keep in sync with
-// Soccer Data Hub/src/soccerhub/agent.py _SYSTEM_INSTRUCTION.
+// data-hub/src/soccerhub/agent.py _SYSTEM_INSTRUCTION.
 function renderAskMd(md){
   const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   const lines = md.split("\n");

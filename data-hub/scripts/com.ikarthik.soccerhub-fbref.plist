@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs the FBref-sourced chain (seasons -> understat -> age_curve) on this Mac.
+  These stages cannot run on GitHub Actions: FBref's Cloudflare challenge refuses
+  datacenter IPs.
+
+  Fires daily at 06:00 local; the script's SCHEDULE picks the work by weekday:
+  Mon=ENG, Tue=ISL (FotMob, no browser), Wed=ESP, Thu=GER, Fri=ITA, Sat=FRA, Sun=none.
+  All five FBref leagues in one pass trips FBref's per-IP limit (measured 2026-09-29:
+  league 1 took 35 min, league 2 was refused), so each league refreshes weekly.
+
+  Install:  cp "data-hub/scripts/com.ikarthik.soccerhub-fbref.plist" ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ikarthik.soccerhub-fbref.plist
+  Run now:  launchctl kickstart -p gui/$(id -u)/com.ikarthik.soccerhub-fbref
+  Remove:   launchctl bootout gui/$(id -u)/com.ikarthik.soccerhub-fbref
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ikarthik.soccerhub-fbref</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/ikarthik/Documents/GitHub/Everything-Football-Soccer/data-hub/.venv/bin/python</string>
+        <string>/Users/ikarthik/Documents/GitHub/Everything-Football-Soccer/data-hub/scripts/refresh_fbref_chain.py</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <!-- daily 06:00; refresh_fbref_chain.SCHEDULE picks the league (Sunday = nothing) -->
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>HOME</key>
+        <string>/Users/ikarthik</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/ikarthik/.soccerhub/logs/fbref-out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ikarthik/.soccerhub/logs/fbref-err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

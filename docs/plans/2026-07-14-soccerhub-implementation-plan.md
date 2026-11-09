@@ -1,4 +1,4 @@
-# Soccer Data Hub (`soccerhub`) Implementation Plan
+# Data Hub (`soccerhub`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,7 +12,7 @@
 
 - Python `requires-python = ">=3.10"`.
 - Dependencies limited to: `soccerdata`, `kloppy`, `mcp`, `pandas`, `pyarrow` (+ `pytest` as dev extra). No others without cause.
-- Package lives at `Soccer Data Hub/` (folder name has a space); all commands `cd "Soccer Data Hub"` first. Package uses **src-layout** (`src/soccerhub/`).
+- Package lives at `data-hub/` (folder name has a space); all commands `cd data-hub` first. Package uses **src-layout** (`src/soccerhub/`).
 - Cache directory resolved from env var `SOCCERHUB_CACHE`, default `./data`.
 - Readers are plain functions — **no base class, no ABC, no unified `fetch()` dispatcher, no entity resolution** (explicit YAGNI).
 - Every reader returns a `Manifest`; the MCP tools return `dataclasses.asdict(manifest)`.
@@ -25,10 +25,10 @@
 ### Task 1: Project scaffold (installable, empty package)
 
 **Files:**
-- Create: `Soccer Data Hub/pyproject.toml`
-- Create: `Soccer Data Hub/src/soccerhub/__init__.py`
-- Create: `Soccer Data Hub/tests/__init__.py`
-- Test: `Soccer Data Hub/tests/test_smoke.py`
+- Create: `data-hub/pyproject.toml`
+- Create: `data-hub/src/soccerhub/__init__.py`
+- Create: `data-hub/tests/__init__.py`
+- Test: `data-hub/tests/test_smoke.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -36,7 +36,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_smoke.py`:
+`data-hub/tests/test_smoke.py`:
 ```python
 def test_package_imports():
     import soccerhub
@@ -45,12 +45,12 @@ def test_package_imports():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_smoke.py -v`
+Run: `cd data-hub && python -m pytest tests/test_smoke.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub'` (package not installed yet).
 
 - [ ] **Step 3: Write pyproject + package init**
 
-`Soccer Data Hub/pyproject.toml`:
+`data-hub/pyproject.toml`:
 ```toml
 [build-system]
 requires = ["setuptools>=68"]
@@ -76,22 +76,22 @@ dev = ["pytest>=8"]
 where = ["src"]
 ```
 
-`Soccer Data Hub/src/soccerhub/__init__.py`:
+`data-hub/src/soccerhub/__init__.py`:
 ```python
 """soccerhub — unified fetch layer for open-source soccer data."""
 ```
 
-`Soccer Data Hub/tests/__init__.py`: (empty file)
+`data-hub/tests/__init__.py`: (empty file)
 
 - [ ] **Step 4: Install and run the test**
 
-Run: `cd "Soccer Data Hub" && pip install -e ".[dev]" && python -m pytest tests/test_smoke.py -v`
+Run: `cd data-hub && pip install -e ".[dev]" && python -m pytest tests/test_smoke.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add pyproject.toml src/soccerhub/__init__.py tests/__init__.py tests/test_smoke.py
 git commit -m "chore(soccerhub): scaffold installable package"
 ```
@@ -101,9 +101,9 @@ git commit -m "chore(soccerhub): scaffold installable package"
 ### Task 2: Errors + Manifest
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/errors.py`
-- Create: `Soccer Data Hub/src/soccerhub/manifest.py`
-- Test: `Soccer Data Hub/tests/test_manifest.py`
+- Create: `data-hub/src/soccerhub/errors.py`
+- Create: `data-hub/src/soccerhub/manifest.py`
+- Test: `data-hub/tests/test_manifest.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -114,7 +114,7 @@ git commit -m "chore(soccerhub): scaffold installable package"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_manifest.py`:
+`data-hub/tests/test_manifest.py`:
 ```python
 import pandas as pd
 from soccerhub.manifest import Manifest, infer_date_range
@@ -147,18 +147,18 @@ def test_infer_date_range_none_when_no_date_column():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_manifest.py -v`
+Run: `cd data-hub && python -m pytest tests/test_manifest.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.manifest'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/errors.py`:
+`data-hub/src/soccerhub/errors.py`:
 ```python
 class SoccerhubError(Exception):
     """Raised when a data fetch fails."""
 ```
 
-`Soccer Data Hub/src/soccerhub/manifest.py`:
+`data-hub/src/soccerhub/manifest.py`:
 ```python
 import json
 from dataclasses import asdict, dataclass
@@ -200,13 +200,13 @@ def infer_date_range(df) -> tuple | None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_manifest.py -v`
+Run: `cd data-hub && python -m pytest tests/test_manifest.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/errors.py src/soccerhub/manifest.py tests/test_manifest.py
 git commit -m "feat(soccerhub): add Manifest, SoccerhubError, date-range inference"
 ```
@@ -216,8 +216,8 @@ git commit -m "feat(soccerhub): add Manifest, SoccerhubError, date-range inferen
 ### Task 3: Cache core + `cached_fetch`
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/cache.py`
-- Test: `Soccer Data Hub/tests/test_cache.py`
+- Create: `data-hub/src/soccerhub/cache.py`
+- Test: `data-hub/tests/test_cache.py`
 
 **Interfaces:**
 - Consumes: `Manifest`, `infer_date_range` (Task 2); `SoccerhubError` (Task 2).
@@ -233,7 +233,7 @@ git commit -m "feat(soccerhub): add Manifest, SoccerhubError, date-range inferen
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_cache.py`:
+`data-hub/tests/test_cache.py`:
 ```python
 import pandas as pd
 import pytest
@@ -290,12 +290,12 @@ def test_cached_fetch_wraps_errors_and_writes_no_manifest():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_cache.py -v`
+Run: `cd data-hub && python -m pytest tests/test_cache.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.cache'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/cache.py`:
+`data-hub/src/soccerhub/cache.py`:
 ```python
 import hashlib
 import json
@@ -377,13 +377,13 @@ def cached_fetch(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_cache.py -v`
+Run: `cd data-hub && python -m pytest tests/test_cache.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/cache.py tests/test_cache.py
 git commit -m "feat(soccerhub): add cache core and cached_fetch contract"
 ```
@@ -393,9 +393,9 @@ git commit -m "feat(soccerhub): add cache core and cached_fetch contract"
 ### Task 4: FBref reader
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/readers/__init__.py`
-- Create: `Soccer Data Hub/src/soccerhub/readers/fbref.py`
-- Test: `Soccer Data Hub/tests/test_fbref.py`
+- Create: `data-hub/src/soccerhub/readers/__init__.py`
+- Create: `data-hub/src/soccerhub/readers/fbref.py`
+- Test: `data-hub/tests/test_fbref.py`
 
 **Interfaces:**
 - Consumes: `cached_fetch` (Task 3).
@@ -403,7 +403,7 @@ git commit -m "feat(soccerhub): add cache core and cached_fetch contract"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_fbref.py`:
+`data-hub/tests/test_fbref.py`:
 ```python
 import pandas as pd
 import pytest
@@ -437,14 +437,14 @@ def test_fetch_fbref_season_caches_reader_output(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_fbref.py -v`
+Run: `cd data-hub && python -m pytest tests/test_fbref.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.readers'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/readers/__init__.py`: (empty file)
+`data-hub/src/soccerhub/readers/__init__.py`: (empty file)
 
-`Soccer Data Hub/src/soccerhub/readers/fbref.py`:
+`data-hub/src/soccerhub/readers/fbref.py`:
 ```python
 import soccerdata as sd
 
@@ -465,13 +465,13 @@ def fetch_fbref_season(league: str, season: str, force: bool = False) -> Manifes
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_fbref.py -v`
+Run: `cd data-hub && python -m pytest tests/test_fbref.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/readers/__init__.py src/soccerhub/readers/fbref.py tests/test_fbref.py
 git commit -m "feat(soccerhub): add FBref season reader"
 ```
@@ -481,8 +481,8 @@ git commit -m "feat(soccerhub): add FBref season reader"
 ### Task 5: StatsBomb events reader
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/readers/statsbomb.py`
-- Test: `Soccer Data Hub/tests/test_statsbomb.py`
+- Create: `data-hub/src/soccerhub/readers/statsbomb.py`
+- Test: `data-hub/tests/test_statsbomb.py`
 
 **Interfaces:**
 - Consumes: `cached_fetch` (Task 3).
@@ -490,7 +490,7 @@ git commit -m "feat(soccerhub): add FBref season reader"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_statsbomb.py`:
+`data-hub/tests/test_statsbomb.py`:
 ```python
 import pandas as pd
 import pytest
@@ -524,12 +524,12 @@ def test_fetch_statsbomb_events_converts_dataset_to_df(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_statsbomb.py -v`
+Run: `cd data-hub && python -m pytest tests/test_statsbomb.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.readers.statsbomb'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/readers/statsbomb.py`:
+`data-hub/src/soccerhub/readers/statsbomb.py`:
 ```python
 from kloppy import statsbomb
 
@@ -550,13 +550,13 @@ def fetch_statsbomb_events(match_id: str, force: bool = False) -> Manifest:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_statsbomb.py -v`
+Run: `cd data-hub && python -m pytest tests/test_statsbomb.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/readers/statsbomb.py tests/test_statsbomb.py
 git commit -m "feat(soccerhub): add StatsBomb events reader"
 ```
@@ -566,8 +566,8 @@ git commit -m "feat(soccerhub): add StatsBomb events reader"
 ### Task 6: Transfermarkt values reader
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/readers/transfermarkt.py`
-- Test: `Soccer Data Hub/tests/test_transfermarkt.py`
+- Create: `data-hub/src/soccerhub/readers/transfermarkt.py`
+- Test: `data-hub/tests/test_transfermarkt.py`
 
 **Interfaces:**
 - Consumes: `cached_fetch` (Task 3).
@@ -577,7 +577,7 @@ git commit -m "feat(soccerhub): add StatsBomb events reader"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_transfermarkt.py`:
+`data-hub/tests/test_transfermarkt.py`:
 ```python
 import pandas as pd
 import pytest
@@ -610,12 +610,12 @@ def test_fetch_transfermarkt_values_filters_by_competition(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_transfermarkt.py -v`
+Run: `cd data-hub && python -m pytest tests/test_transfermarkt.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.readers.transfermarkt'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/readers/transfermarkt.py`:
+`data-hub/src/soccerhub/readers/transfermarkt.py`:
 ```python
 import pandas as pd
 
@@ -644,13 +644,13 @@ def fetch_transfermarkt_values(competition: str, force: bool = False) -> Manifes
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_transfermarkt.py -v`
+Run: `cd data-hub && python -m pytest tests/test_transfermarkt.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/readers/transfermarkt.py tests/test_transfermarkt.py
 git commit -m "feat(soccerhub): add Transfermarkt valuations reader"
 ```
@@ -660,8 +660,8 @@ git commit -m "feat(soccerhub): add Transfermarkt valuations reader"
 ### Task 7: MCP server (Layer 2)
 
 **Files:**
-- Create: `Soccer Data Hub/src/soccerhub/mcp_server.py`
-- Test: `Soccer Data Hub/tests/test_mcp_server.py`
+- Create: `data-hub/src/soccerhub/mcp_server.py`
+- Test: `data-hub/tests/test_mcp_server.py`
 
 **Interfaces:**
 - Consumes: `fetch_fbref_season`, `fetch_statsbomb_events`, `fetch_transfermarkt_values` (Tasks 4–6).
@@ -669,7 +669,7 @@ git commit -m "feat(soccerhub): add Transfermarkt valuations reader"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_mcp_server.py`:
+`data-hub/tests/test_mcp_server.py`:
 ```python
 from dataclasses import asdict
 
@@ -709,12 +709,12 @@ def test_server_registers_three_tools():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_mcp_server.py -v`
+Run: `cd data-hub && python -m pytest tests/test_mcp_server.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'soccerhub.mcp_server'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`Soccer Data Hub/src/soccerhub/mcp_server.py`:
+`data-hub/src/soccerhub/mcp_server.py`:
 ```python
 from dataclasses import asdict
 
@@ -751,7 +751,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_mcp_server.py -v`
+Run: `cd data-hub && python -m pytest tests/test_mcp_server.py -v`
 Expected: PASS (2 tests).
 
 > If `@mcp.tool()` does not return the wrapped function (so `server.fbref_season` is not directly callable), adjust the test to call `fbref_season.fn(...)` per the installed FastMCP API. Verify against the installed `mcp` package before assuming.
@@ -759,7 +759,7 @@ Expected: PASS (2 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/mcp_server.py tests/test_mcp_server.py
 git commit -m "feat(soccerhub): add MCP server exposing the three readers"
 ```
@@ -769,9 +769,9 @@ git commit -m "feat(soccerhub): add MCP server exposing the three readers"
 ### Task 8: Package exports + README + full-suite check
 
 **Files:**
-- Modify: `Soccer Data Hub/src/soccerhub/__init__.py`
-- Create: `Soccer Data Hub/README.md`
-- Test: `Soccer Data Hub/tests/test_exports.py`
+- Modify: `data-hub/src/soccerhub/__init__.py`
+- Create: `data-hub/README.md`
+- Test: `data-hub/tests/test_exports.py`
 
 **Interfaces:**
 - Consumes: all reader functions, `Manifest`, `SoccerhubError`.
@@ -779,7 +779,7 @@ git commit -m "feat(soccerhub): add MCP server exposing the three readers"
 
 - [ ] **Step 1: Write the failing test**
 
-`Soccer Data Hub/tests/test_exports.py`:
+`data-hub/tests/test_exports.py`:
 ```python
 def test_top_level_exports():
     import soccerhub
@@ -796,12 +796,12 @@ def test_top_level_exports():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd "Soccer Data Hub" && python -m pytest tests/test_exports.py -v`
+Run: `cd data-hub && python -m pytest tests/test_exports.py -v`
 Expected: FAIL — `AssertionError: fetch_fbref_season`.
 
 - [ ] **Step 3: Wire exports + write README**
 
-`Soccer Data Hub/src/soccerhub/__init__.py`:
+`data-hub/src/soccerhub/__init__.py`:
 ```python
 """soccerhub — unified fetch layer for open-source soccer data."""
 
@@ -820,9 +820,9 @@ __all__ = [
 ]
 ```
 
-`Soccer Data Hub/README.md`:
+`data-hub/README.md`:
 ```markdown
-# Soccer Data Hub (`soccerhub`)
+# Data Hub (`soccerhub`)
 
 Unified fetch layer for open-source soccer data. Fetch → cache to parquet →
 return a manifest. Primary interface is the Python package; an MCP server wraps
@@ -830,7 +830,7 @@ the same functions for agent use.
 
 ## Install
 
-    cd "Soccer Data Hub"
+    cd data-hub
     pip install -e ".[dev]"
 
 ## Use (package)
@@ -861,18 +861,18 @@ a manifest dict.
 | `fetch_transfermarkt_values(competition)` | Transfermarkt (pre-scraped) | player valuations |
 
 Adding a source is one new file in `readers/` reusing `cached_fetch` — see
-`docs/plans/2026-07-14-soccerhub-data-layer-design.md`.
+`docs/specs/2026-07-14-soccerhub-data-layer-design.md`.
 ```
 
 - [ ] **Step 4: Run the full suite**
 
-Run: `cd "Soccer Data Hub" && python -m pytest -v`
+Run: `cd data-hub && python -m pytest -v`
 Expected: PASS — all tests across every file (smoke, manifest, cache, fbref, statsbomb, transfermarkt, mcp_server, exports).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "Soccer Data Hub"
+cd data-hub
 git add src/soccerhub/__init__.py README.md tests/test_exports.py
 git commit -m "feat(soccerhub): wire top-level exports and add README"
 ```
@@ -883,4 +883,4 @@ git commit -m "feat(soccerhub): wire top-level exports and add README"
 
 - Live integration test hitting real FBref/StatsBomb/Transfermarkt, marked `@pytest.mark.network` and skipped by default.
 - Add Sofifa and Understat readers (one file each, reusing `cached_fetch`).
-- Root `README.md`: add project #2 (Soccer Data Hub) to the numbered project list.
+- Root `README.md`: add project #2 (Data Hub) to the numbered project list.

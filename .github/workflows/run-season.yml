@@ -15,9 +15,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
+      - run: pip install -e data-hub
       - name: refresh transfers table
-        working-directory: Soccer Data Hub
+        working-directory: data-hub
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -43,9 +43,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
+      - run: pip install -e data-hub
       - name: refresh match results (plain CSV — no scraping, safe in parallel)
-        working-directory: Soccer Data Hub
+        working-directory: data-hub
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -64,9 +64,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e "Soccer Data Hub"
+      - run: pip install -e data-hub
       - name: snapshot today's club Elo ratings
-        working-directory: Soccer Data Hub
+        working-directory: data-hub
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
